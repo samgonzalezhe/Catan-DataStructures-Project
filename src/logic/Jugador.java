@@ -30,6 +30,7 @@ public class Jugador {
     public String getNombre() { return nombre; }
     public int getPuntos() { return puntosVictoria; }
 
+
     public void mostrarInventario() {
         String[] nombres = {"Madera", "Ladrillo", "Lana", "Trigo", "Piedra"};
         System.out.print("Inventario de " + nombre + ": ");
