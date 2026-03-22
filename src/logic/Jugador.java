@@ -30,6 +30,10 @@ public class Jugador {
     public String getNombre() { return nombre; }
     public int getPuntos() { return puntosVictoria; }
 
+    // Método para sumar puntos
+    public void sumarPuntos(int puntos) {
+        this.puntosVictoria += puntos;
+    }
 
     public void mostrarInventario() {
         String[] nombres = {"Madera", "Ladrillo", "Lana", "Trigo", "Piedra"};
