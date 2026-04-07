@@ -1,68 +1,32 @@
-package com.mycompany.catan;
+package logic;
 
-import java.util.ArrayList;
-import java.util.List;
+import structures.ListaCircular;
 
-public class GestorTurnos<T> extends Lista<T> {
+public class GestorTurnos {
 
-    private Nodo<T> actual;
-    private int rondas;
+    private ListaCircular<Jugador> colaTurnos;
 
     public GestorTurnos() {
-        super();
-        this.actual = null;
-        this.rondas = 0;
-    }
-    
-    public List<T> obtenerElementos() {
-
-        List<T> lista = new ArrayList<>();
-
-        if (isEmpty()) return lista;
-
-        Nodo<T> temp = head;
-
-        do {
-            lista.add(temp.getDato());
-            temp = temp.getSiguiente();
-        } while (temp != head);
-
-        return lista;
+        this.colaTurnos = new ListaCircular<>();
     }
 
-    @Override
-    public void insertarFinal(T dato) {
-
-        super.insertarFinal(dato);
-
-        if (last != null) {
-            last.setSiguiente(head);
-        }
-
-        if (actual == null) {
-            actual = head;
-        }
+    public void registrarJugador(Jugador j) {
+        colaTurnos.insertarFinal(j);
     }
 
-    public void pasarTurno() {
-
-        if (isEmpty()) return;
-
-        if (actual == last) {
-            rondas++;
-        }
-
-        actual = actual.getSiguiente();
+    public Jugador obtenerTurnoActual() {
+        return colaTurnos.jugadorActual();
     }
 
-    public T jugadorActual() {
-
-        if (actual == null) return null;
-
-        return actual.getDato();
+    public Jugador pasarTurno() {
+        return colaTurnos.pasarTurno();
     }
 
     public int getRondas() {
-        return rondas;
+        return colaTurnos.getRondas();
+    }
+
+    public void verOrdenDeTurnos() {
+        colaTurnos.mostrarLista();
     }
 }
