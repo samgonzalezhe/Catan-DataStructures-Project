@@ -46,23 +46,19 @@ public class Arista {
     
     public boolean puedeConstruirCarretera(Jugador jugador, List<Arista> aristas) {
 
-    // 1. Debe estar libre
         if (this.carretera != null) {
             return false;
         }
-
-    // 2. Conectada a construcción del jugador
+        
         if (v1.tieneConstruccionDe(jugador) || v2.tieneConstruccionDe(jugador)) {
             return true;
         }
 
-    // 3. Conectada a otra carretera del jugador
         for (Arista a : aristas) {
 
             if (a.carretera != null &&
                 a.carretera.getPropietario() == jugador) {
 
-            // Si comparte vértice con esta arista
                 if (a.v1 == v1 || a.v1 == v2 ||
                     a.v2 == v1 || a.v2 == v2) {
 
@@ -96,6 +92,21 @@ public class Arista {
             this.carretera = new Carretera(jugador);
             return true;
         }
+        return false;
+    }
+
+    public boolean estaConectadaAJugador(Jugador jugador) {
+
+        if (v1.getConstruccion() != null &&
+            v1.getConstruccion().getPropietario() == jugador) {
+            return true;
+        }
+
+        if (v2.getConstruccion() != null &&
+            v2.getConstruccion().getPropietario() == jugador) {
+            return true;
+        }
+
         return false;
     }
     
