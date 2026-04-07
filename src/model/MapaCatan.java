@@ -1,5 +1,8 @@
 package com.mycompany.catan;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.*;
 
 public class MapaCatan {  //Atributos
@@ -19,15 +22,20 @@ public class MapaCatan {  //Atributos
     public MapaCatan() {   //Constructor
         inicializarTerrenos();
         inicializarNumeros();
-        generarMapaHexagonal();
-        
+        generarMapaHexagonal();        
         generarVerticesReales();
-        generarAristasReales();   
-        
-        inicializarLadron();
-        
+        generarAristasReales();           
+        inicializarLadron();        
     }
 
+    public Hexagono obtenerTileAleatorio() {
+
+        List<Hexagono> tiles = new ArrayList<>(mapa.values());
+
+        Random rand = new Random();
+
+        return tiles.get(rand.nextInt(tiles.size()));
+    }
             //Metodos
     private void inicializarTerrenos() {
         agregarTerrenos(TipoTerreno.BOSQUE, 4);
