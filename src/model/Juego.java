@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Random;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 public class Juego {
 
@@ -13,6 +14,7 @@ public class Juego {
     private Dado dado1;
     private Dado dado2;
     private ArregloDinamico<Jugador> jugadores;
+    private Scanner scanner;
 
     
     private Map<Recurso, Integer> costoAldea() {
@@ -51,11 +53,10 @@ public class Juego {
 
         mapa = new MapaCatan();
         turnos = new GestorTurnos<>();
-
-        jugadores = new ArregloDinamico<Jugador>(10);
-        
+        jugadores = new ArregloDinamico<Jugador>(10);        
         dado1 = new Dado();
         dado2 = new Dado();
+        scanner = new Scanner(System.in);
     }
     
     public Hexagono obtenerTileAleatorio() {
@@ -180,6 +181,164 @@ public class Juego {
         for (int i = 0; i < cantidadTurnos; i++) {
             jugarTurno();
         }
+    }
+
+    public void iniciarJuego() {
+
+        while (true) {
+
+            menuTurno();
+
+            if (hayGanador()) {
+                break;
+            }
+        }
+    }
+
+    public void menuTurno() {
+
+        boolean turnoActivo = true;
+
+        while (turnoActivo) {
+
+            Jugador actual = turnos.jugadorActual();
+
+            System.out.println("\n--- Turno de: " + actual.getNombre() + " ---");
+            System.out.println("1. Lanzar dados");
+            System.out.println("2. Construir");
+            System.out.println("3. Ver recursos");
+            System.out.println("4. Pasar turno");
+
+            int opcion = scanner.nextInt();
+
+            switch (opcion) {
+
+                case 1:
+                    lanzarDados(actual);
+                    break;
+
+                case 2:
+                    menuConstruccion(actual);
+                    break;
+
+                case 3:
+                    mostrarRecursos(actual);
+                    break;
+
+                case 4:
+                    turnos.pasarTurno();
+                    turnoActivo = false;
+                    break;
+
+                default:
+                    System.out.println("Opción inválida");
+            }
+        }
+    }
+
+    private void lanzarDados(Jugador jugador) {
+
+        int resultado = dado1.lanzar() + dado2.lanzar();
+    
+        System.out.println("Resultado: " + resultado);
+
+        if (resultado == 7) {
+            System.out.println("¡Ladrón activado!");
+            Hexagono tile = mapa.obtenerTileAleatorio();
+            mapa.moverLadronYRobar(jugador, tile);
+        } else {
+            mapa.producirRecursos(resultado);
+        }
+    }
+
+    private void mostrarRecursos(Jugador jugador) {
+        System.out.println("Recursos de " + jugador.getNombre() + ":");
+        System.out.println(jugador.getRecursos());
+    }
+
+    private void menuConstruccion(Jugador jugador) {
+
+        System.out.println("\n--- Construcción ---");
+        System.out.println("1. Aldea");
+        System.out.println("2. Carretera");
+        System.out.println("3. Ciudad");
+
+        int opcion = scanner.nextInt();
+
+        switch (opcion) {
+
+            case 1:
+                construirAldea(jugador);
+                break;
+
+            case 2:
+                construirCarretera(jugador);
+                break;
+
+            case 3:
+                construirCiudadDemo(jugador);
+                break;
+
+            default:
+                System.out.println("Opción inválida");
+        }
+    }
+    
+    private void construirAldea(Jugador jugador) {
+
+        mapa.mostrarVertices();
+
+        System.out.print("Seleccione vértice: ");
+        int index = scanner.nextInt();
+
+        Vertice v = mapa.getVertice(index);
+
+        if (v.getConstruccion() != null) {
+            System.out.println("Ya está ocupado");
+            return;
+        }
+
+        if (v.tieneVecinoOcupado()) {
+            System.out.println("No puedes construir aquí (regla de distancia)");
+            return;
+        }
+
+        Aldea aldea = new Aldea(jugador);
+        v.setConstruccion(aldea);
+
+        System.out.println("Aldea construida correctamente");
+    }
+
+    private void construirCarretera(Jugador jugador) {
+
+        mapa.mostrarAristas();
+
+        System.out.print("Seleccione arista: ");
+        int index = scanner.nextInt();
+
+        Arista a = mapa.getArista(index);
+
+        if (a.getConstruccion() != null) {
+            System.out.println("Ya está ocupada");
+            return;
+        }
+
+        if (!a.estaConectadaAJugador(jugador)) {
+            System.out.println("Debe estar conectada a tu red");
+            return;
+        }
+
+        Carretera c = new Carretera(jugador);
+        a.setConstruccion(c);
+
+        System.out.println("Carretera construida");
+    }
+
+    private void construirCiudadDemo(Jugador jugador) {
+
+        Vertice v = mapa.getVertices().get(0);
+
+        construirCiudad(jugador, v);
     }
     
     public boolean hayGanador() {
