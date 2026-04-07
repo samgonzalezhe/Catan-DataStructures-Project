@@ -188,7 +188,7 @@ public class MapaCatan {  //Atributos
             if (v.getConstruccion() == null) {
                 System.out.println("Libre");
             } else {
-                System.out.println("Ocupado por " + v.getConstruccion().getJugador().getNombre());
+                System.out.println("Ocupado por " + v.getConstruccion().getPropietario().getNombre());
             }
         }
     }
