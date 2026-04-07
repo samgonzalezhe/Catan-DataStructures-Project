@@ -107,75 +107,107 @@ public class MapaCatan {  //Atributos
     }
     
     private void generarVerticesReales() {
-    int id = 0;
+        int id = 0;
 
-    for (Hexagono tile : mapa.values()) {
+        for (Hexagono tile : mapa.values()) {
 
-        int q = tile.coord.q;
-        int r = tile.coord.r;
+            int q = tile.coord.q;
+            int r = tile.coord.r;
 
         // 6 posiciones alrededor del hexágono
-        int[][] offsets = {
-            {q, r}, {q+1, r}, {q, r+1},
-            {q-1, r+1}, {q-1, r}, {q, r-1}
-        };
+            int[][] offsets = {
+                {q, r}, {q+1, r}, {q, r+1},
+                {q-1, r+1}, {q-1, r}, {q, r-1}
+            };
 
-        for (int[] pos : offsets) {
-            VertexKey key = new VertexKey(pos[0], pos[1]);
+            for (int[] pos : offsets) {
+                VertexKey key = new VertexKey(pos[0], pos[1]);
 
-            Vertice v = mapaVertices.get(key);
+                Vertice v = mapaVertices.get(key);
 
-            if (v == null) {
-                v = new Vertice(id++);
-                mapaVertices.put(key, v);
-                vertices.add(v);
+                if (v == null) {
+                    v = new Vertice(id++);
+                    mapaVertices.put(key, v);
+                    vertices.add(v);
+                }
+
+                v.agregarTile(tile);
             }
-
-            v.agregarTile(tile);
         }
     }
-}
     
     private void generarAristasReales() {
-    int id = 0;
+        int id = 0;
 
-    List<Vertice> lista = new ArrayList<>(mapaVertices.values());
+        List<Vertice> lista = new ArrayList<>(mapaVertices.values());
 
-    for (Vertice v1 : lista) {
-        for (Vertice v2 : lista) {
+        for (Vertice v1 : lista) {
+            for (Vertice v2 : lista) {
 
-            if (v1 == v2) continue;
+                if (v1 == v2) continue;
 
             // Si comparten EXACTAMENTE 2 tiles → son vecinos reales
-            int comunes = 0;
+                int comunes = 0;
 
-            for (Hexagono t : v1.getTilesAdyacentes()) {
-                if (v2.getTilesAdyacentes().contains(t)) {
-                    comunes++;
-                }
-            }
-
-            if (comunes == 2) {
-                v1.agregarVecino(v2);
-
-                // Evitar duplicados
-                boolean existe = false;
-
-                for (Arista a : aristas) {
-                    if ((a.getV1() == v1 && a.getV2() == v2) ||
-                        (a.getV1() == v2 && a.getV2() == v1)) {
-                        existe = true;
-                        break;
+                for (Hexagono t : v1.getTilesAdyacentes()) {
+                    if (v2.getTilesAdyacentes().contains(t)) {
+                        comunes++;
                     }
                 }
 
-                if (!existe) {
-                    aristas.add(new Arista(id++, v1, v2));
+                if (comunes == 2) {
+                    v1.agregarVecino(v2);
+
+                // Evitar duplicados
+                    boolean existe = false;
+
+                    for (Arista a : aristas) {
+                        if ((a.getV1() == v1 && a.getV2() == v2) ||
+                            (a.getV1() == v2 && a.getV2() == v1)) {
+                            existe = true;
+                            break;
+                        }
+                    }
+
+                    if (!existe) {
+                        aristas.add(new Arista(id++, v1, v2));
+                    }
                 }
             }
         }
     }
-}
+
+    public void mostrarVertices() {
+
+        for (int i = 0; i < vertices.size(); i++) {
+
+            Vertice v = vertices.get(i);
+
+            System.out.print(i + ": ");
+
+            if (v.getConstruccion() == null) {
+                System.out.println("Libre");
+            } else {
+                System.out.println("Ocupado por " + v.getConstruccion().getJugador().getNombre());
+            }
+        }
+    }
+
+    public void mostrarAristas() {
+
+        for (int i = 0; i < aristas.size(); i++) {
+
+            Arista a = aristas.get(i);
+
+            System.out.print(i + ": ");
+
+            if (a.getConstruccion() == null) {
+                System.out.println("Libre");
+            } else {
+                System.out.println("Ocupada");
+            }
+        }
+    }
     
     public void imprimirMapa() {
         System.out.println("MAPA HEXAGONAL DE CATAN:\n");
@@ -186,11 +218,11 @@ public class MapaCatan {  //Atributos
     }
     
     public void imprimirVertices() {
-        for (Vertice v : vertices) {
-            System.out.println("Vertice " + v.getId() +
-                " vecinos: " + v.getVecinos().size());
+            for (Vertice v : vertices) {
+                System.out.println("Vertice " + v.getId() +
+                    " vecinos: " + v.getVecinos().size());
+        }
     }
-}
 
     public void imprimirAristas() {
         for (Arista a : aristas) {
@@ -213,7 +245,12 @@ public class MapaCatan {  //Atributos
     }
     
     public Vertice getVertice(int index) {
-        return vertices.get(index);
+
+        if (index >= 0 && index < vertices.size()) {
+            return vertices.get(index);
+        }
+
+        return null;
     }
 
     public Arista getArista(int index) {
