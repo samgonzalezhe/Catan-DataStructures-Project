@@ -13,4 +13,9 @@ public abstract class Construccion {
     }
 
     public abstract int getPuntosVictoria();
+
+    public Jugador getJugador() {
+        return propietario;
+    }
+
 }
