@@ -25,6 +25,10 @@ public class Jugador {
     public String getNombre() {
         return nombre;
     }
+
+    public Map<Recurso, Integer> getRecursos() {
+        return recursos;
+    }
     
     public void agregarRecurso(Recurso r, int cantidad) {
 
