@@ -96,6 +96,17 @@ public class Vertice {
         this.construccion = new Aldea(jugador);
         return true;
     }
+
+    public boolean tieneVecinoOcupado() {
+
+        for (Vertice v : vecinos) {
+            if (v.getConstruccion() != null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     
     public void setConstruccion(Construccion construccion) {
         this.construccion = construccion;
