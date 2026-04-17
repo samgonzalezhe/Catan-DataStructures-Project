@@ -1,13 +1,16 @@
-package com.mycompany.catan;
+package model;
+
+import java.util.Objects;
 
 public class VertexKey {
-
     private int x;
     private int y;
+    private int index;
 
-    public VertexKey(int x, int y) {
+    public VertexKey(int x, int y, int index) {
         this.x = x;
         this.y = y;
+        this.index = index;
     }
 
     @Override
@@ -20,6 +23,6 @@ public class VertexKey {
 
     @Override
     public int hashCode() {
-        return x * 31 + y;
+        return Objects.hash(x, y);
     }
 }
