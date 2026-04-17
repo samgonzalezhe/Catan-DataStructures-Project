@@ -1,15 +1,18 @@
-package com.mycompany.catan;
+package model;
+
+import logic.Jugador;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class Vertice {
-    
+    //Aristas adyacentes
     private List<Vertice> vecinos = new ArrayList<>();
-
     private int id;
     private Construccion construccion;
     private List<Hexagono> tilesAdyacentes;
+    private double pixelX;
+    private double pixelY;
 
     public Vertice(int id) {
         this.id = id;
@@ -26,65 +29,53 @@ public class Vertice {
         return tilesAdyacentes;
     }
 
-    public int getId() {
-        return id;
-    }
-    
-    public Construccion getConstruccion() {
-        return construccion;
-    }
-    
     public void agregarVecino(Vertice v) {
-    if (!vecinos.contains(v)) {
-        vecinos.add(v);
-    }
-}
-
-    public List<Vertice> getVecinos() {
-        return vecinos;
-    } 
-    
-    public boolean puedeConstruirAldea() {
-    // 1. Debe estar vacío
-    if (this.construccion != null) {
-        return false;
-    }
-    // 2. Ningún vecino puede tener construcción
-    for (Vertice vecino : vecinos) {
-        if (vecino.getConstruccion() != null) {
-            return false;
+        if (!vecinos.contains(v)) {
+            vecinos.add(v);
         }
     }
-    return true;
+
+    public boolean puedeConstruirAldea(Jugador jugador) {
+        // 1. Debe estar vacío
+        if (this.construccion != null) {
+            return false;
+        }
+        // 2. Ningún vecino puede tener construcción
+        for (Vertice vecino : vecinos) {
+            if (vecino.getConstruccion() != null) {
+                return false;
+            }
+        }
+        return jugador.tieneRecursos(Aldea.COSTO);
     }
-    
+
     public boolean construirAldea(Jugador jugador) {
 
-    if (puedeConstruirAldea()) {
-        this.construccion = new Aldea(jugador);
-        return true;
+        if (puedeConstruirAldea(jugador)) {
+            this.construccion = new Aldea(jugador);
+            return true;
+        }
+        return false;
     }
-    return false;
-    }
-    
+
     public boolean mejorarACiudad(Jugador jugador) {
 
-    if (this.construccion instanceof Aldea &&
-        this.construccion.getPropietario() == jugador) {
+        if (this.construccion instanceof Aldea &&
+                this.construccion.getPropietario() == jugador) {
 
-        this.construccion = new Ciudad(jugador);
-        return true;
+            this.construccion = new Ciudad(jugador);
+            return true;
+        }
+        return false;
     }
-    return false;
-    }
-    
+
     public boolean tieneConstruccionDe(Jugador jugador) {
         return construccion != null &&
-               construccion.getPropietario() == jugador;
+                construccion.getPropietario() == jugador;
     }
-    
+
     public boolean construirAldeaInicial(Jugador jugador) {
-    // Solo validar que esté libre y distancia
+        // Solo validar que esté libre y distancia
         if (this.construccion != null) {
             return false;
         }
@@ -97,18 +88,30 @@ public class Vertice {
         return true;
     }
 
-    public boolean tieneVecinoOcupado() {
+    public double getX() { return pixelX; }
+    public double getY() { return pixelY; }
 
-        for (Vertice v : vecinos) {
-            if (v.getConstruccion() != null) {
-                return true;
-            }
-        }
+    //Getters y setters
 
-        return false;
-    }
-    
     public void setConstruccion(Construccion construccion) {
         this.construccion = construccion;
     }
+
+    public void setPosicionPixeles(double x, double y) {
+        this.pixelX = x;
+        this.pixelY = y;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public Construccion getConstruccion() {
+        return construccion;
+    }
+
+    public List<Vertice> getVecinos() {
+        return vecinos;
+    }
 }
+
