@@ -1,6 +1,6 @@
 package com.mycompany.catan;
 
-class HexCoord {
+public class HexCoord {
     int q; // columna
     int r; // fila
 
