@@ -4,11 +4,14 @@ import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import logic.Dado;
 import logic.GestorTurnos;
+import logic.Jugador;
 import model.*;
 
 import java.util.*;
@@ -17,18 +20,118 @@ public class JuegoView {
 
     private Stage stage;
     private GestorTurnos gestor;
+    private MapaVisual mapaVisual;
+    private List<Vertice> listaVertices;
+    private List<Arista> listaAristas;
+    //Fase inicial del juego
+    private enum FaseJuego { INICIAL, NORMAL }
+    private FaseJuego faseActual = FaseJuego.INICIAL;
+    private int construccionesIniciales = 0;
+    private boolean aldeaInicialPuesta = false;
+    //Estado de construccion
+    enum ModoConstruccion { NINGUNO, ALDEA, CIUDAD, CAMINO }
+    private ModoConstruccion modoActual = ModoConstruccion.NINGUNO;
+    //Manejar direccion turnos
+    private boolean rondaInversa = false;
+
+    private final String estiloBotonConstruir =
+            "-fx-background-color: #1A0F0A;" +
+                    "-fx-text-fill: #D4A843;" +
+                    "-fx-font-family: 'Georgia';" +
+                    "-fx-font-size: 12px;" +
+                    "-fx-border-color: #D4A843;" +
+                    "-fx-border-width: 1;" +
+                    "-fx-border-radius: 4;" +
+                    "-fx-background-radius: 4;" +
+                    "-fx-padding: 6 10;" +
+                    "-fx-cursor: hand;";
+
+    private final String estiloBotonActivo =
+            "-fx-background-color: #D4A843;" +
+                    "-fx-text-fill: #1A0F0A;" +
+                    "-fx-font-family: 'Georgia';" +
+                    "-fx-font-size: 12px;" +
+                    "-fx-border-color: #D4A843;" +
+                    "-fx-border-width: 1;" +
+                    "-fx-border-radius: 4;" +
+                    "-fx-background-radius: 4;" +
+                    "-fx-padding: 6 10;" +
+                    "-fx-cursor: hand;";
+
+    // Botones
+    private Button btnAldea;
+    private Button btnCiudad;
+    private Button btnCamino;
+    private Button botonDado;
+    private Button botonFinTurno;
+    private Label labelFase;
 
     public JuegoView(Stage stage, GestorTurnos gestor) {
         this.stage = stage;
         this.gestor = gestor;
     }
 
+    public interface CallbackConstruccion {
+        void onAldeaColocada();
+        void onCaminoColocado();
+    }
+
     public void iniciar() {
         System.out.println("Jugador actual: " + gestor.obtenerTurnoActual());
         Pane mapPane = new Pane();
         MapaCatan logicaCatan = new MapaCatan();
-        GestorTurnos gestor = new GestorTurnos();
-        MapaVisual mapaVisual = new MapaVisual(mapPane, gestor);
+        this.mapaVisual = new MapaVisual(mapPane, gestor);
+
+        botonDado = new Button("Tirar dados");
+        botonFinTurno = new Button("Finalizar turno");
+        btnAldea = new Button("Aldea");
+        btnCiudad = new Button("Ciudad");
+        btnCamino = new Button("Camino");
+
+        btnAldea.setStyle(estiloBotonConstruir);
+        btnCiudad.setStyle(estiloBotonConstruir);
+        btnCamino.setStyle(estiloBotonConstruir);
+
+        //Indica si es fase inicial
+        labelFase = new Label("Fase inicial\nColoca tu aldea");
+        labelFase.setText("Fase inicial\n" +
+                this.gestor.obtenerTurnoActual().getNombre() +
+                ": coloca tu aldea");
+        labelFase.setStyle(
+                "-fx-text-fill: #C4956A;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 12px;" +
+                        "-fx-text-alignment: center;"
+        );
+
+        botonDado.setDisable(true);
+        btnCiudad.setDisable(true);
+        btnAldea.setDisable(false);
+        btnCamino.setDisable(true);
+        botonFinTurno.setDisable(true);
+
+        this.mapaVisual.setCallback(new CallbackConstruccion() {
+            @Override
+            public void onAldeaColocada() {
+                aldeaInicialPuesta = true;
+                labelFase.setText("Ahora coloca\ntu camino");
+                btnAldea.setDisable(true);
+                btnCamino.setDisable(false);
+                btnCamino.setStyle(estiloBotonActivo);
+                mapaVisual.setModo(ModoConstruccion.CAMINO);
+                modoActual = ModoConstruccion.CAMINO;
+                btnCamino.setStyle(estiloBotonActivo);
+            }
+
+            @Override
+            public void onCaminoColocado() {
+                labelFase.setText("Turno completado\nFinaliza el turno");
+                btnCamino.setDisable(true);
+                mapaVisual.setModo(ModoConstruccion.NINGUNO);
+                modoActual = ModoConstruccion.NINGUNO;
+                botonFinTurno.setDisable(false);
+            }
+        });
 
         mapPane.setPrefSize(1000, 1000);
 
@@ -41,8 +144,8 @@ public class JuegoView {
             setAristas.addAll(hex.getAristas());
         }
 
-        List<Vertice> listaVertices = new ArrayList<>(setVertices);
-        List<Arista> listaAristas = new ArrayList<>(setAristas);
+        this.listaVertices = new ArrayList<>(setVertices);
+        this.listaAristas = new ArrayList<>(setAristas);
 
         for (Vertice v : listaVertices) {
             double xPromedio = v.getTilesAdyacentes().stream()
@@ -110,35 +213,94 @@ public class JuegoView {
             }
         });
 
-        // --- PANEL DE TURNO Y DADO (esquina superior izquierda) ---
-        VBox panel = new VBox(10);
-        panel.setLayoutX(15);
-        panel.setLayoutY(15);
-        panel.setStyle(
-                "-fx-background-color: rgba(44, 24, 16, 0.85);" +
+        // --- PANEL DE TURNO Y DADO ---//
+        VBox panelLateral = new VBox(12);
+        panelLateral.setLayoutX(710);
+        panelLateral.setLayoutY(15);
+        panelLateral.setPrefWidth(175);
+        panelLateral.setStyle(
+                "-fx-background-color: rgba(44, 24, 16, 0.92);" +
                         "-fx-border-color: #D4A843;" +
                         "-fx-border-width: 1.5;" +
-                        "-fx-border-radius: 6;" +
-                        "-fx-background-radius: 6;" +
-                        "-fx-padding: 12 16;"
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-padding: 14 12;"
         );
 
-        Label turnoLabel = new Label();
-        turnoLabel.setStyle(
+        Label tituloPanel = new Label("Jugadores");
+
+        tituloPanel.setStyle(
                 "-fx-text-fill: #D4A843;" +
-                        "-fx-font-size: 15px;" +
                         "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
                         "-fx-font-weight: bold;"
         );
 
-        Label dadoLabel = new Label("Dado: —");
-        dadoLabel.setStyle(
-                "-fx-text-fill: #C4956A;" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-font-family: 'Georgia';"
+        // --- TARJETAS DE JUGADORES ---
+        String[] coloresJugador = {"#C0392B", "#2471A3", "#1E8449", "#D68910"};
+        List<Label> tarjetasJugadores = new ArrayList<>();
+        List<String> nombresJugadores = new ArrayList<>();
+
+        Jugador jugadorActualTemp = this.gestor.obtenerTurnoActual();
+        for (int i = 0; i < 4; i++) {
+            nombresJugadores.add(this.gestor.obtenerTurnoActual().getNombre());
+            this.gestor.pasarTurno();
+        }
+
+        VBox tarjetasBox = new VBox(8);
+        for (int i = 0; i < nombresJugadores.size(); i++) {
+            Label tarjeta = new Label(nombresJugadores.get(i));
+            tarjeta.setPrefWidth(151);
+            tarjeta.setStyle(
+                    "-fx-background-color: #1A0F0A;" +
+                            "-fx-text-fill: " + coloresJugador[i] + ";" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 13px;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-border-color: " + coloresJugador[i] + ";" +
+                            "-fx-border-width: 1.5;" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 6 10;"
+            );
+            tarjetasJugadores.add(tarjeta);
+            tarjetasBox.getChildren().add(tarjeta);
+        }
+
+        // Iluminar el primero al inicio
+        actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+
+        javafx.scene.control.Separator sep = new javafx.scene.control.Separator();
+        sep.setStyle("-fx-background-color: #D4A843;");
+
+        // --- DADOS GRÁFICOS ---
+        Label tituloDados = new Label("Dados");
+        tituloDados.setStyle(
+                "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;"
         );
 
-        Button botonDado = new Button("⚄  Tirar dado");
+        HBox dadosBox = new HBox(10);
+        dadosBox.setAlignment(javafx.geometry.Pos.CENTER);
+
+        javafx.scene.canvas.Canvas canvasDado1 = new javafx.scene.canvas.Canvas(55, 55);
+        javafx.scene.canvas.Canvas canvasDado2 = new javafx.scene.canvas.Canvas(55, 55);
+        dibujarDado(canvasDado1, 1);
+        dibujarDado(canvasDado2, 1);
+
+        dadosBox.getChildren().addAll(canvasDado1, canvasDado2);
+
+        Label totalLabel = new Label("Total: —");
+        totalLabel.setStyle(
+                "-fx-text-fill: #C4956A;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;"
+        );
+
+        botonDado.setMaxWidth(Double.MAX_VALUE);
         botonDado.setStyle(
                 "-fx-background-color: #8B1A1A;" +
                         "-fx-text-fill: #D4A843;" +
@@ -149,66 +311,442 @@ public class JuegoView {
                         "-fx-border-width: 1;" +
                         "-fx-border-radius: 4;" +
                         "-fx-background-radius: 4;" +
-                        "-fx-padding: 6 14;" +
+                        "-fx-padding: 8 14;" +
                         "-fx-cursor: hand;"
         );
+        botonDado.setOnMouseEntered(e -> botonDado.setStyle(
+                "-fx-background-color: #A52020;" +
+                        "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-border-color: #D4A843;" +
+                        "-fx-border-width: 1;" +
+                        "-fx-border-radius: 4;" +
+                        "-fx-background-radius: 4;" +
+                        "-fx-padding: 8 14;" +
+                        "-fx-cursor: hand;"
+        ));
+        botonDado.setOnMouseExited(e -> botonDado.setStyle(
+                "-fx-background-color: #8B1A1A;" +
+                        "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-border-color: #D4A843;" +
+                        "-fx-border-width: 1;" +
+                        "-fx-border-radius: 4;" +
+                        "-fx-background-radius: 4;" +
+                        "-fx-padding: 8 14;" +
+                        "-fx-cursor: hand;"
+        ));
 
-        // Hover del botón
-        botonDado.setOnMouseEntered(e ->
-                botonDado.setStyle(
-                        "-fx-background-color: #A52020;" +
-                                "-fx-text-fill: #D4A843;" +
-                                "-fx-font-family: 'Georgia';" +
-                                "-fx-font-size: 13px;" +
-                                "-fx-font-weight: bold;" +
-                                "-fx-border-color: #D4A843;" +
-                                "-fx-border-width: 1;" +
-                                "-fx-border-radius: 4;" +
-                                "-fx-background-radius: 4;" +
-                                "-fx-padding: 6 14;" +
-                                "-fx-cursor: hand;"
-                )
-        );
-        botonDado.setOnMouseExited(e ->
-                botonDado.setStyle(
-                        "-fx-background-color: #8B1A1A;" +
-                                "-fx-text-fill: #D4A843;" +
-                                "-fx-font-family: 'Georgia';" +
-                                "-fx-font-size: 13px;" +
-                                "-fx-font-weight: bold;" +
-                                "-fx-border-color: #D4A843;" +
-                                "-fx-border-width: 1;" +
-                                "-fx-border-radius: 4;" +
-                                "-fx-background-radius: 4;" +
-                                "-fx-padding: 6 14;" +
-                                "-fx-cursor: hand;"
-                )
-        );
-
-        // Inicializar turno
-        turnoLabel.setText(gestor.obtenerTurnoActual() != null
-                ? "Turno: " + gestor.obtenerTurnoActual().getNombre()
-                : "Turno: —");
-
-        // Acción del dado
+        // --- ACCIÓN DEL BOTÓN ---
         Dado dado = new Dado();
         botonDado.setOnAction(e -> {
             int resultado = dado.lanzar();
-            dadoLabel.setText("Dado: " + resultado);
+            dibujarDado(canvasDado1, dado.getDado1());
+            dibujarDado(canvasDado2, dado.getDado2());
+            totalLabel.setText("Total: " + resultado);
             logicaCatan.producirRecursos(resultado);
-            gestor.pasarTurno();
-            turnoLabel.setText(gestor.obtenerTurnoActual() != null
-                    ? "Turno: " + gestor.obtenerTurnoActual().getNombre()
-                    : "Turno: —");
+
+            botonDado.setDisable(true);
+            botonFinTurno.setDisable(false);
         });
 
-        panel.getChildren().addAll(turnoLabel, dadoLabel, botonDado);
-        root.getChildren().add(panel);
+        botonFinTurno.setMaxWidth(Double.MAX_VALUE);
+        botonFinTurno.setDisable(true); // empieza deshabilitado
+        botonFinTurno.setStyle(
+                "-fx-background-color: #1A4A1A;" +
+                        "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-border-color: #D4A843;" +
+                        "-fx-border-width: 1;" +
+                        "-fx-border-radius: 4;" +
+                        "-fx-background-radius: 4;" +
+                        "-fx-padding: 8 14;" +
+                        "-fx-cursor: hand;" +
+                        "-fx-opacity: 0.5;"
+        );
 
+        // TODO: En fase inicial, validar que no se puede construir aldea
+        // entre dos carreteras enemigas (regla oficial de Catan pendiente)
+
+        botonFinTurno.setOnAction(e -> {
+            if (faseActual == FaseJuego.INICIAL) {
+                if (!aldeaInicialPuesta) {
+                    labelFase.setText("Debes colocar\ntu aldea primero");
+                    return;
+                }
+                aldeaInicialPuesta = false;
+
+                if (!rondaInversa) {
+                    if (this.gestor.esUltimoJugador()) {
+                        rondaInversa = true;
+                        labelFase.setText("Fase inicial - Ronda 2\n" +
+                                this.gestor.obtenerTurnoActual().getNombre() +
+                                ": coloca tu aldea");
+                    } else {
+                        this.gestor.pasarTurno();
+                        actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                                this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                        labelFase.setText("Fase inicial\n" +
+                                this.gestor.obtenerTurnoActual().getNombre() +
+                                ": coloca tu aldea");
+                    }
+                } else {
+                    if (this.gestor.esPrimerJugador()) {
+                        faseActual = FaseJuego.NORMAL;
+                        labelFase.setText("¡Fase normal!");
+                        habilitarBotonesFaseNormal(btnAldea, btnCiudad, btnCamino, botonDado);
+                        mapaVisual.setFaseInicial(false);
+                        return;
+                    } else {
+                        this.gestor.pasarTurnoReversa();
+                        actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                                this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                        labelFase.setText("Fase inicial - Ronda 2\n" +
+                                this.gestor.obtenerTurnoActual().getNombre() +
+                                ": coloca tu aldea");
+                    }
+                }
+
+                // Resetear para siguiente jugador
+                btnAldea.setDisable(false);
+                btnCamino.setDisable(true);
+                botonFinTurno.setDisable(true);
+                btnAldea.setStyle(estiloBotonActivo);
+                btnCamino.setStyle(estiloBotonConstruir);
+                modoActual = ModoConstruccion.ALDEA;
+                mapaVisual.setModo(ModoConstruccion.ALDEA);
+
+            } else {
+                // Turno normal
+                this.gestor.pasarTurno();
+                actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                    this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                totalLabel.setText("Total: —");
+                dibujarDado(canvasDado1, 1);
+                dibujarDado(canvasDado2, 1);
+                botonDado.setDisable(false);
+                botonFinTurno.setDisable(true);
+                botonFinTurno.setStyle(
+                    "-fx-background-color: #1A4A1A;" +
+                            "-fx-text-fill: #D4A843;" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 13px;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-border-color: #D4A843;" +
+                            "-fx-border-width: 1;" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 8 14;" +
+                            "-fx-cursor: hand;" +
+                            "-fx-opacity: 0.5;"
+                );
+                modoActual = ModoConstruccion.NINGUNO;
+                mapaVisual.setModo(ModoConstruccion.NINGUNO);
+                btnAldea.setDisable(false);
+                btnCiudad.setDisable(false);
+                btnCamino.setDisable(false);
+                btnAldea.setStyle(estiloBotonConstruir);
+                btnCiudad.setStyle(estiloBotonConstruir);
+                btnCamino.setStyle(estiloBotonConstruir);
+            }
+        });
+
+        botonFinTurno.setOnMouseEntered(e -> {
+            if (!botonFinTurno.isDisabled()) botonFinTurno.setStyle(
+                    "-fx-background-color: #2E6B2E;" +
+                            "-fx-text-fill: #D4A843;" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 13px;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-border-color: #D4A843;" +
+                            "-fx-border-width: 1;" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 8 14;" +
+                            "-fx-cursor: hand;"
+            );
+        });
+        botonFinTurno.setOnMouseExited(e -> {
+            if (!botonFinTurno.isDisabled()) botonFinTurno.setStyle(
+                    "-fx-background-color: #1A4A1A;" +
+                            "-fx-text-fill: #D4A843;" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 13px;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-border-color: #D4A843;" +
+                            "-fx-border-width: 1;" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 8 14;" +
+                            "-fx-cursor: hand;"
+            );
+        });
+
+        // --- SECCIÓN CONSTRUCCIÓN ---
+        javafx.scene.control.Separator sep2 = new javafx.scene.control.Separator();
+        sep2.setStyle("-fx-background-color: #D4A843;");
+
+        Label tituloConstruccion = new Label("⚒  Construir");
+        tituloConstruccion.setStyle(
+                "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;"
+        );
+
+// Acciones de los botones de construcción
+        btnAldea.setOnAction(e -> {
+            if (modoActual == ModoConstruccion.ALDEA) {
+                modoActual = ModoConstruccion.NINGUNO;
+                btnAldea.setStyle(estiloBotonConstruir);
+            } else {
+                modoActual = ModoConstruccion.ALDEA;
+                btnAldea.setStyle(estiloBotonActivo);
+                btnCiudad.setStyle(estiloBotonConstruir);
+                btnCamino.setStyle(estiloBotonConstruir);
+            }
+            mapaVisual.setModo(modoActual);
+        });
+
+        btnCiudad.setOnAction(e -> {
+            if (modoActual == ModoConstruccion.CIUDAD) {
+                modoActual = ModoConstruccion.NINGUNO;
+                btnCiudad.setStyle(estiloBotonConstruir);
+            } else {
+                modoActual = ModoConstruccion.CIUDAD;
+                btnCiudad.setStyle(estiloBotonActivo);
+                btnAldea.setStyle(estiloBotonConstruir);
+                btnCamino.setStyle(estiloBotonConstruir);
+            }
+            mapaVisual.setModo(modoActual);
+        });
+
+        btnCamino.setOnAction(e -> {
+            if (modoActual == ModoConstruccion.CAMINO) {
+                modoActual = ModoConstruccion.NINGUNO;
+                btnCamino.setStyle(estiloBotonConstruir);
+            } else {
+                modoActual = ModoConstruccion.CAMINO;
+                btnCamino.setStyle(estiloBotonActivo);
+                btnAldea.setStyle(estiloBotonConstruir);
+                btnCiudad.setStyle(estiloBotonConstruir);
+            }
+            mapaVisual.setModo(modoActual);
+        });
+
+        panelLateral.getChildren().addAll(sep2, tituloConstruccion, btnAldea, btnCiudad, btnCamino);
+
+        panelLateral.getChildren().addAll(
+                tituloPanel, tarjetasBox, sep, tituloDados, dadosBox, totalLabel, botonDado, botonFinTurno
+        );
+        root.getChildren().add(panelLateral);
 
         Scene scene = new Scene(root, 900, 700);
         stage.setTitle("Catan");
         stage.setScene(scene);
+        crearPanelInfo(root);
         stage.show();
+    }
+
+    private void actualizarTarjetas(List<Label> tarjetas, List<String> nombres,
+                                    String nombreActual, String[] colores) {
+        for (int i = 0; i < tarjetas.size(); i++) {
+            boolean esTurno = nombres.get(i).equals(nombreActual);
+            tarjetas.get(i).setStyle(
+                    "-fx-background-color: " + (esTurno ? colores[i] : "#1A0F0A") + ";" +
+                            "-fx-text-fill: " + (esTurno ? "#1A0F0A" : colores[i]) + ";" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 13px;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-border-color: " + colores[i] + ";" +
+                            "-fx-border-width: " + (esTurno ? "2.5" : "1.5") + ";" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 6 10;"
+            );
+        }
+    }
+
+    private void dibujarDado(javafx.scene.canvas.Canvas canvas, int valor) {
+        javafx.scene.canvas.GraphicsContext gc = canvas.getGraphicsContext2D();
+        double w = canvas.getWidth();
+        double h = canvas.getHeight();
+
+        // Limpiar
+        gc.clearRect(0, 0, w, h);
+
+        // Fondo del dado
+        gc.setFill(javafx.scene.paint.Color.web("#F5E6C8"));
+        gc.fillRoundRect(3, 3, w - 6, h - 6, 10, 10);
+
+        // Borde
+        gc.setStroke(javafx.scene.paint.Color.web("#8B4513"));
+        gc.setLineWidth(2);
+        gc.strokeRoundRect(3, 3, w - 6, h - 6, 10, 10);
+
+        // Puntos
+        gc.setFill(javafx.scene.paint.Color.web("#2C1810"));
+        double r = 5; // radio del punto
+        double c = w / 2; // centro
+        double[][] posiciones = getPosicionesPuntos(valor, w, h);
+        for (double[] pos : posiciones) {
+            gc.fillOval(pos[0] - r, pos[1] - r, r * 2, r * 2);
+        }
+    }
+
+    private double[][] getPosicionesPuntos(int valor, double w, double h) {
+        double m = 14; // margen
+        double c = w / 2;
+        double cm = h / 2;
+        switch (valor) {
+            case 1: return new double[][]{{c, cm}};
+            case 2: return new double[][]{{m, m}, {w-m, h-m}};
+            case 3: return new double[][]{{m, m}, {c, cm}, {w-m, h-m}};
+            case 4: return new double[][]{{m, m}, {w-m, m}, {m, h-m}, {w-m, h-m}};
+            case 5: return new double[][]{{m, m}, {w-m, m}, {c, cm}, {m, h-m}, {w-m, h-m}};
+            case 6: return new double[][]{{m, m}, {w-m, m}, {m, cm}, {w-m, cm}, {m, h-m}, {w-m, h-m}};
+            default: return new double[][]{};
+        }
+    }
+
+    private void habilitarBotonesFaseNormal(Button btnAldea, Button btnCiudad,
+                                            Button btnCamino, Button botonDado) {
+        btnAldea.setDisable(false);
+        btnCiudad.setDisable(false);
+        btnCamino.setDisable(false);
+        botonDado.setDisable(false);
+        botonFinTurno.setDisable(true);
+
+        // Resetear estilos
+        btnAldea.setStyle(estiloBotonConstruir);
+        btnCiudad.setStyle(estiloBotonConstruir);
+        btnCamino.setStyle(estiloBotonConstruir);
+
+        // Resetear modo
+        modoActual = ModoConstruccion.NINGUNO;
+        mapaVisual.setModo(ModoConstruccion.NINGUNO);
+
+        labelFase.setText("¡Fase normal!\nTira los dados");
+    }
+
+    private void crearPanelInfo(Pane root) {
+        Button btnInfo = new Button("?");
+        btnInfo.setLayoutX(15);  // ← izquierda
+        btnInfo.setLayoutY(650); // ← abajo del panel lateral
+        btnInfo.setStyle(
+                "-fx-background-color: #8B1A1A;" +
+                        "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 16px;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-border-color: #D4A843;" +
+                        "-fx-border-width: 1;" +
+                        "-fx-border-radius: 20;" +
+                        "-fx-background-radius: 20;" +
+                        "-fx-min-width: 32;" +
+                        "-fx-min-height: 32;" +
+                        "-fx-cursor: hand;"
+        );
+
+        VBox panelInfo = new VBox(8);
+        panelInfo.setLayoutX(15);
+        panelInfo.setLayoutY(15);
+        panelInfo.setPrefWidth(340);
+        panelInfo.setVisible(false);
+        panelInfo.setStyle(
+                "-fx-background-color: rgba(44, 24, 16, 0.97);" +
+                        "-fx-border-color: #D4A843;" +
+                        "-fx-border-width: 1.5;" +
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-padding: 14 12;"
+        );
+
+        Label titulo = new Label("Terrenos y recursos");
+        titulo.setStyle(
+                "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: bold;"
+        );
+
+        // Cabecera
+        HBox cabecera = new HBox(0);
+        cabecera.setPrefWidth(316);
+        Label colTerreno = new Label("Terreno");
+        colTerreno.setPrefWidth(158);
+        colTerreno.setStyle("-fx-text-fill: #C4956A; -fx-font-family: 'Georgia'; -fx-font-size: 11px; -fx-font-weight: bold;");
+        Label colRecurso = new Label("Recurso");
+        colRecurso.setPrefWidth(158);
+        colRecurso.setStyle("-fx-text-fill: #C4956A; -fx-font-family: 'Georgia'; -fx-font-size: 11px; -fx-font-weight: bold;");
+        cabecera.getChildren().addAll(colTerreno, colRecurso);
+
+        javafx.scene.control.Separator sep = new javafx.scene.control.Separator();
+
+        // Filas terreno + recurso
+        String[][] filas = {
+                {"Bosque",   "/bosqueCatan.png",   "Madera",   "/maderaCatan.png"},
+                {"Colina",   "/colinaCatan.png",   "Ladrillo", "/ladrilloCatan.png"},
+                {"Campo",    "/campoCatan.png",    "Trigo",    "/trigoCatan.png"},
+                {"Pasto",    "/pastoCatan.png",    "Oveja",    "/ovejaCatan.png"},
+                {"Montaña",  "/montanaCatan.png",  "Piedra",   "/piedraCatan.png"},
+                {"Desierto", "/desiertoCatan.png", "—",        null}
+        };
+
+        panelInfo.getChildren().addAll(titulo, sep, cabecera);
+
+        for (String[] fila : filas) {
+            HBox filaCelda = new HBox(0);
+
+            VBox celdaTerreno = crearCeldaInfo(fila[0], fila[1]);
+            celdaTerreno.setPrefWidth(158);
+
+            VBox celdaRecurso = crearCeldaInfo(fila[2], fila[3]);
+            celdaRecurso.setPrefWidth(158);
+
+            filaCelda.getChildren().addAll(celdaTerreno, celdaRecurso);
+            panelInfo.getChildren().add(filaCelda);
+        }
+
+        btnInfo.setOnAction(e -> panelInfo.setVisible(!panelInfo.isVisible()));
+
+        root.getChildren().addAll(panelInfo, btnInfo);
+    }
+
+    private VBox crearCeldaInfo(String nombre, String rutaImagen) {
+        VBox celda = new VBox(4);
+        celda.setAlignment(javafx.geometry.Pos.CENTER);
+        celda.setPadding(new javafx.geometry.Insets(4));
+
+        if (rutaImagen != null) {
+            try {
+                javafx.scene.image.Image img = new javafx.scene.image.Image(
+                        getClass().getResourceAsStream(rutaImagen)
+                );
+                javafx.scene.image.ImageView imgView = new javafx.scene.image.ImageView(img);
+                imgView.setFitWidth(55);
+                imgView.setFitHeight(55);
+                imgView.setPreserveRatio(true);
+                celda.getChildren().add(imgView);
+            } catch (Exception e) {
+                System.err.println("Error cargando: " + rutaImagen);
+            }
+        }
+
+        Label label = new Label(nombre);
+        label.setStyle(
+                "-fx-text-fill: #D4A843;" +
+                        "-fx-font-family: 'Georgia';" +
+                        "-fx-font-size: 11px;"
+        );
+        celda.getChildren().add(label);
+
+        return celda;
     }
 }
