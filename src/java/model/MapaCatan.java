@@ -1,9 +1,10 @@
-package com.mycompany.catan;
+package model;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.*;
+import ui.TableroUtils;
 
 public class MapaCatan {  //Atributos
     
@@ -13,7 +14,7 @@ public class MapaCatan {  //Atributos
     // Cola para números
     private Queue<Integer> bolsaNumeros = new LinkedList<>();
     private List<Vertice> vertices = new ArrayList<>();
-    private List<Arista> aristas = new ArrayList<>();
+    private Set<Arista> aristas = new HashSet<>();
     private Map<VertexKey, Vertice> mapaVertices = new HashMap<>();
     
     private Ladron ladron;
@@ -25,7 +26,11 @@ public class MapaCatan {  //Atributos
         generarMapaHexagonal();        
         generarVerticesReales();
         generarAristasReales();           
-        inicializarLadron();        
+        inicializarLadron();     
+        
+        System.out.println("Vertices reales: " + vertices.size());
+        System.out.println("Aristas reales: " + aristas.size());
+        System.out.println("Hexagonos: " + mapa.size());
     }
 
     public Hexagono obtenerTileAleatorio() {
@@ -107,58 +112,70 @@ public class MapaCatan {  //Atributos
     }
     
     private void generarVerticesReales() {
-        int id = 0;
+    int id = 0;
 
-        for (Hexagono tile : mapa.values()) {
+    for (Hexagono tile : mapa.values()) {
 
-            int q = tile.coord.q;
-            int r = tile.coord.r;
+        double[] centro = TableroUtils.hexToPixel(tile.coord);
 
-        // 6 posiciones alrededor del hexágono
-            int[][] offsets = {
-                {q, r}, {q+1, r}, {q, r+1},
-                {q-1, r+1}, {q-1, r}, {q, r-1}
-            };
+        for (int i = 0; i < 6; i++) {
 
-            for (int[] pos : offsets) {
-                VertexKey key = new VertexKey(pos[0], pos[1]);
+            double angle = Math.toRadians(60 * i);
 
-                Vertice v = mapaVertices.get(key);
+            double x = centro[0] + TableroUtils.TAMAÑO * Math.cos(angle);
+            double y = centro[1] + TableroUtils.TAMAÑO * Math.sin(angle);
 
-                if (v == null) {
-                    v = new Vertice(id++);
-                    mapaVertices.put(key, v);
-                    vertices.add(v);
-                }
+            VertexKey key = new VertexKey(x, y);
 
-                v.agregarTile(tile);
+            Vertice v = mapaVertices.get(key);
+
+            if (v == null) {
+                v = new Vertice(id++);
+                v.setPosicionPixeles(x, y);
+                mapaVertices.put(key, v);
+                vertices.add(v);
             }
+
+            v.agregarTile(tile);
+            tile.agregarVertice(v);
         }
     }
+}
     
     private void generarAristasReales() {
         int id = 0;
+        
 
         List<Vertice> lista = new ArrayList<>(mapaVertices.values());
 
-        for (Vertice v1 : lista) {
-            for (Vertice v2 : lista) {
+        for (int i = 0; i < lista.size(); i++) {
+            Vertice v1 = lista.get(i);
 
-                if (v1 == v2) continue;
+            for (int j = i + 1; j < lista.size(); j++) {
+                Vertice v2 = lista.get(j);
 
-            // Si comparten EXACTAMENTE 2 tiles → son vecinos reales
+            // 1. Calcular distancia (SIEMPRE fuera de condiciones)
+                double dx = v1.getX() - v2.getX();
+                double dy = v1.getY() - v2.getY();
+                double distancia = Math.sqrt(dx * dx + dy * dy);
+
+            // 2. Contar hexágonos compartidos
                 int comunes = 0;
-
                 for (Hexagono t : v1.getTilesAdyacentes()) {
                     if (v2.getTilesAdyacentes().contains(t)) {
                         comunes++;
                     }
                 }
 
-                if (comunes == 2) {
-                    v1.agregarVecino(v2);
+            // 3. Clasificar tipo de arista
+                boolean esInterna = comunes == 2;
+                boolean esBorde = comunes == 1;
 
-                // Evitar duplicados
+            // 4. Validación final
+                if ((esInterna || esBorde) &&
+                    distancia < TableroUtils.TAMAÑO * 1.1) {
+
+                // 5. Evitar duplicados
                     boolean existe = false;
 
                     for (Arista a : aristas) {
@@ -170,7 +187,21 @@ public class MapaCatan {  //Atributos
                     }
 
                     if (!existe) {
-                        aristas.add(new Arista(id++, v1, v2));
+                        Arista nueva = new Arista(id++, v1, v2);
+                        aristas.add(nueva);
+
+                    // 6. Vecinos (una sola vez)
+                        v1.agregarVecino(v2);
+                        v2.agregarVecino(v1);
+
+                    // 7. Asociar a hexágonos
+                        for (Hexagono tile : mapa.values()) {
+                            if (tile.getVertices().contains(v1) &&
+                                tile.getVertices().contains(v2)) {
+
+                                tile.agregarArista(nueva);
+                            }
+                        }
                     }
                 }
             }
@@ -195,9 +226,9 @@ public class MapaCatan {  //Atributos
 
     public void mostrarAristas() {
 
-        for (int i = 0; i < aristas.size(); i++) {
+        int i = 0;
 
-            Arista a = aristas.get(i);
+        for (Arista a : aristas) {
 
             System.out.print(i + ": ");
 
@@ -206,6 +237,8 @@ public class MapaCatan {  //Atributos
             } else {
                 System.out.println("Ocupada");
             }
+
+            i++;
         }
     }
     
@@ -236,7 +269,7 @@ public class MapaCatan {  //Atributos
         return mapa;
     }
     
-    public List<Arista> getAristas() {
+    public Set<Arista> getAristas(){
         return aristas;
     }
     
@@ -254,7 +287,7 @@ public class MapaCatan {  //Atributos
     }
 
     public Arista getArista(int index) {
-        return aristas.get(index);
+        return new ArrayList<>(aristas).get(index);
     }
     
     private void inicializarLadron() {
