@@ -1,4 +1,4 @@
-package com.mycompany.catan;
+package logic;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -11,12 +11,13 @@ public class Jugador {
     private String nombre;
     private Map<Recurso, Integer> recursos;
     private int puntosVictoria;
-    
+    private String color;
+
     public Jugador(String nombre) {
         this.nombre = nombre;
         recursos = new HashMap<>();
 
-    // Inicializar todos en 0
+        // Inicializar todos en 0
         for (Recurso r : Recurso.values()) {
             recursos.put(r, 0);
         }
@@ -26,22 +27,18 @@ public class Jugador {
         return nombre;
     }
 
-    public Map<Recurso, Integer> getRecursos() {
-        return recursos;
-    }
-    
     public void agregarRecurso(Recurso r, int cantidad) {
 
         int actual = recursos.getOrDefault(r, 0);
         recursos.put(r, actual + cantidad);
     }
-    
+
     public void imprimirRecursos() {
         for (Recurso r : recursos.keySet()) {
             System.out.println(r + ": " + recursos.get(r));
         }
     }
-    
+
     public boolean tieneRecursos(Map<Recurso, Integer> costo) {
 
         for (Recurso r : costo.keySet()) {
@@ -55,7 +52,7 @@ public class Jugador {
 
         return true;
     }
-    
+
     public void gastarRecursos(Map<Recurso, Integer> costo) {
 
         for (Recurso r : costo.keySet()) {
@@ -65,7 +62,7 @@ public class Jugador {
             recursos.put(r, actual - costo.get(r));
         }
     }
-    
+
     public Recurso quitarRecursoAleatorio() {
 
         List<Recurso> disponibles = new ArrayList<>();
@@ -87,12 +84,25 @@ public class Jugador {
 
         return elegido;
     }
-    
+
     public void agregarPuntos(int puntos) {
         puntosVictoria += puntos;
     }
 
     public int getPuntosVictoria() {
         return puntosVictoria;
+    }
+
+    public <K> Map<K, Integer> getRecursos() {
+        return null;
+    }
+
+    public String getColor() { return color; }
+
+    public void setColor(String color) { this.color = color; }
+
+    @Override
+    public String toString() {
+        return nombre;
     }
 }
