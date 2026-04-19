@@ -8,10 +8,13 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
-import logic.Dado;
-import logic.GestorTurnos;
-import logic.Jugador;
+import javafx.geometry.Pos;
+import model.Dado;
+import model.GestorTurnos;
+import model.Jugador;
 import model.*;
 
 import java.util.*;
@@ -33,6 +36,10 @@ public class JuegoView {
     private ModoConstruccion modoActual = ModoConstruccion.NINGUNO;
     //Manejar direccion turnos
     private boolean rondaInversa = false;
+    //Nuevo
+    private Map<Recurso, Label> labelsRecursos = new HashMap<>();
+    private Map<Recurso, HBox> filasRecursos = new HashMap<>();
+    private VBox inventarioPanel;
 
     private final String estiloBotonConstruir =
             "-fx-background-color: #1A0F0A;" +
@@ -74,6 +81,7 @@ public class JuegoView {
     public interface CallbackConstruccion {
         void onAldeaColocada();
         void onCaminoColocado();
+        void onConstruccionRealizada();
     }
 
     public void iniciar() {
@@ -131,6 +139,11 @@ public class JuegoView {
                 modoActual = ModoConstruccion.NINGUNO;
                 botonFinTurno.setDisable(false);
             }
+            
+            @Override
+            public void onConstruccionRealizada() {
+                actualizarInventario(); // 🔥 ESTA ES LA CLAVE
+            }
         });
 
         mapPane.setPrefSize(1000, 1000);
@@ -170,6 +183,7 @@ public class JuegoView {
         Pane root = new Pane(zoomGroup);
         root.setStyle("-fx-background-color: #2c3e50;");
         root.setClip(new javafx.scene.shape.Rectangle(900, 700));
+        
 
         // ZOOM con scroll del ratón
         zoomGroup.setOnScroll(event -> {
@@ -349,6 +363,8 @@ public class JuegoView {
             dibujarDado(canvasDado2, dado.getDado2());
             totalLabel.setText("Total: " + resultado);
             logicaCatan.producirRecursos(resultado);
+            
+            actualizarInventario();//Nuevo
 
             botonDado.setDisable(true);
             botonFinTurno.setDisable(false);
@@ -390,6 +406,8 @@ public class JuegoView {
                                 ": coloca tu aldea");
                     } else {
                         this.gestor.pasarTurno();
+                        actualizarInventario();
+                        actualizarColorInventario();
                         actualizarTarjetas(tarjetasJugadores, nombresJugadores,
                                 this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
                         labelFase.setText("Fase inicial\n" +
@@ -405,6 +423,8 @@ public class JuegoView {
                         return;
                     } else {
                         this.gestor.pasarTurnoReversa();
+                        actualizarInventario();
+                        actualizarColorInventario();
                         actualizarTarjetas(tarjetasJugadores, nombresJugadores,
                                 this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
                         labelFase.setText("Fase inicial - Ronda 2\n" +
@@ -425,8 +445,11 @@ public class JuegoView {
             } else {
                 // Turno normal
                 this.gestor.pasarTurno();
+                actualizarInventario();
+                actualizarColorInventario();
                 actualizarTarjetas(tarjetasJugadores, nombresJugadores,
                     this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+
                 totalLabel.setText("Total: —");
                 dibujarDado(canvasDado1, 1);
                 dibujarDado(canvasDado2, 1);
@@ -546,6 +569,11 @@ public class JuegoView {
                 tituloPanel, tarjetasBox, sep, tituloDados, dadosBox, totalLabel, botonDado, botonFinTurno
         );
         root.getChildren().add(panelLateral);
+        
+        inventarioPanel = crearPanelInventario();
+        root.getChildren().add(inventarioPanel);
+        actualizarInventario();
+        actualizarColorInventario();
 
         Scene scene = new Scene(root, 900, 700);
         stage.setTitle("Catan");
@@ -748,5 +776,119 @@ public class JuegoView {
         celda.getChildren().add(label);
 
         return celda;
+    }
+    
+    //Nuevo
+    private VBox crearPanelInventario() {
+        VBox panel = new VBox(8);
+        panel.setLayoutX(15);
+        panel.setLayoutY(160);
+        panel.setPrefWidth(175);
+
+        panel.setStyle(
+            "-fx-background-color: rgba(44, 24, 16, 0.92);" +
+            "-fx-border-color: #D4A843;" +
+            "-fx-border-width: 1.5;" +
+            "-fx-border-radius: 8;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 10;"
+        );
+
+        Label titulo = new Label("Recursos");
+        titulo.setStyle(
+            "-fx-text-fill: #D4A843;" +
+            "-fx-font-family: 'Georgia';" +
+            "-fx-font-size: 13px;" +
+            "-fx-font-weight: bold;"
+        );
+
+        panel.getChildren().add(titulo);
+
+        for (Recurso r : Recurso.values()) {
+
+    //  Imagen del recurso
+            Image img = new Image(getClass().getResourceAsStream(obtenerRutaRecurso(r)));
+            ImageView icono = new ImageView(img);
+            icono.setFitWidth(30);
+            icono.setFitHeight(30);
+
+    //  Cantidad
+            Label cantidad = new Label("0");
+            cantidad.setStyle(
+                "-fx-text-fill: #D4A843;" +
+                "-fx-font-family: 'Georgia';" +
+                "-fx-font-size: 13px;" +
+                "-fx-font-weight: bold;"
+            );
+
+            labelsRecursos.put(r, cantidad); // 🔥 CLAVE
+
+    // 🔹 Fila: imagen + número
+            HBox fila = new HBox(10, icono, cantidad);
+            fila.setAlignment(Pos.CENTER_LEFT);
+
+            panel.getChildren().add(fila);
+        }
+        return panel ;
+    }
+    
+    private String obtenerRutaRecurso(Recurso r) {
+        switch (r) {
+            case MADERA: return "/maderaCatan.png";
+            case LADRILLO: return "/ladrilloCatan.png";
+            case TRIGO: return "/trigoCatan.png";
+            case OVEJA: return "/ovejaCatan.png";
+            case PIEDRA: return "/piedraCatan.png";
+            default: return null;
+        }
+    }
+    
+    private void actualizarInventario() {
+    Jugador jugador = gestor.obtenerTurnoActual();
+    if (jugador == null) return;
+
+    for (Recurso r : Recurso.values()) {
+        int cantidad = jugador.getRecursos().getOrDefault(r, 0);
+
+        Label label = labelsRecursos.get(r);
+
+        if (label != null) {  // 🔥 ESTO ES CLAVE
+            label.setText(String.valueOf(cantidad));
+        } else {
+            System.out.println("Label null para recurso: " + r);
+        }
+        // controlar botones según recursos
+        if (faseActual == FaseJuego.NORMAL) {
+            btnAldea.setDisable(!jugador.tieneRecursos(Aldea.COSTO));
+            btnCiudad.setDisable(!jugador.tieneRecursos(Ciudad.COSTO));
+            btnCamino.setDisable(!jugador.tieneRecursos(Carretera.COSTO));
+        }
+    }
+}
+    
+    private String obtenerColorJugadorHex(Jugador jugador) {
+        if (jugador == null) return "#D4A843";
+
+        switch (jugador.getColor().toLowerCase()) {
+            case "rojo": return "#C0392B";
+            case "azul": return "#2471A3";
+            case "verde": return "#1E8449";
+            case "naranja": return "#D68910";
+            default: return "#D4A843";
+        }
+    }
+    
+    private void actualizarColorInventario() {
+        Jugador jugador = gestor.obtenerTurnoActual();
+        String color = obtenerColorJugadorHex(jugador);
+
+        inventarioPanel.setStyle(
+            "-fx-background-color: rgba(44, 24, 16, 0.92);" +
+            "-fx-border-color: " + color + ";" +
+            "-fx-border-width: 2;" +
+            "-fx-border-radius: 8;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 10;"
+        );
     }
 }
