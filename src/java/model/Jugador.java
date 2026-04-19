@@ -1,4 +1,4 @@
-package logic;
+package model;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -93,8 +93,14 @@ public class Jugador {
         return puntosVictoria;
     }
 
-    public <K> Map<K, Integer> getRecursos() {
-        return null;
+    public Map<Recurso, Integer> getRecursos() {
+        if (recursos == null) {
+            recursos = new HashMap<>();
+            for (Recurso r : Recurso.values()) {
+                recursos.put(r, 0);
+            }
+        }
+        return recursos;
     }
 
     public String getColor() { return color; }
