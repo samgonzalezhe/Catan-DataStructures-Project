@@ -14,11 +14,8 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.effect.DropShadow;
 import logic.GestorTurnos;
 import logic.Jugador;
-import model.Arista;
-import model.Ciudad;
-import model.Hexagono;
+import model.*;
 import logic.TipoTerreno;
-import model.Vertice;
 
 import java.util.*;
 
@@ -28,15 +25,29 @@ public class MapaVisual {
     private static final Double GROSOR_BORDE = 4.0;
     private static final Color COLOR_BORDE = Color.rgb(50, 50, 50);
     private GestorTurnos gestorTurnos;
+    private JuegoView.ModoConstruccion modoActual = JuegoView.ModoConstruccion.NINGUNO;
     private List<Hexagono> ultimaListaHexagonos;
     private List<Vertice> ultimaListaVertices;
     private List<Arista> ultimaListaAristas;
+    private Map<Vertice, Circle> nodosVertices = new HashMap<>();
+    private Map<Arista, Line> nodosAristas = new HashMap<>();
+    private JuegoView.CallbackConstruccion callback;
+    private boolean faseInicial = true;
+
 
     public MapaVisual(Pane canvas, GestorTurnos gestor) {
         this.canvas = canvas;
         this.canvas.setStyle("-fx-background-color: #2c3e50;"); // Fondo oscuro (Cambiar a azul mar)
         this.gestorTurnos = gestor;
         cargarTexturas();
+    }
+
+    public void setCallback(JuegoView.CallbackConstruccion cb) {
+        this.callback = cb;
+    }
+
+    public void setFaseInicial(boolean faseInicial) {
+        this.faseInicial = faseInicial;
     }
 
     private void cargarTexturas() {
@@ -60,14 +71,13 @@ public class MapaVisual {
     public void renderizarMapa(List<Hexagono> hexagonos, List<Vertice> vertices, List<Arista> aristas) {
         System.out.println("DEBUG: Iniciando renderizado con " + hexagonos.size() + " hexágonos, "
                 + vertices.size() + " vértices y " + aristas.size() + " aristas.");
+        canvas.getChildren().clear();
+        nodosVertices.clear();
+        nodosAristas.clear();
+
         this.ultimaListaHexagonos = hexagonos;
         this.ultimaListaVertices = vertices;
         this.ultimaListaAristas = aristas;
-
-        canvas.getChildren().clear();
-
-        Set<Vertice> verticesDibujados = new HashSet<>();
-        Set<Arista> aristasDibujadas = new HashSet<>();
 
         DropShadow sombraTablero = new DropShadow();
         sombraTablero.setRadius(15.0);
@@ -127,21 +137,24 @@ public class MapaVisual {
                 canvas.getChildren().add(numeroText);
             }
 
-            //DIBUJAR ARISTAS DEL HEXAGONO
-            for (Arista a : hex.getAristas()) {
-                if (!aristasDibujadas.contains(a)) {
-                    dibujarArista(a);
-                    aristasDibujadas.add(a);
-                }
-            }
 
-            //DIBUJAR VERTICE DEL HEXAGONO
-            for (Vertice v : hex.getVertices()) {
-                // Solo dibujamos si no se ha dibujado antes (puedes usar un Set<Vertice> visitados)
-                if (!verticesDibujados.contains(v)) {
-                    dibujarVertice(v);
-                    verticesDibujados.add(v);
-                }
+        }
+
+        //DIBUJAR ARISTAS
+        Set<Arista> aristasDibujadas = new HashSet<>();
+        for (Arista a : aristas) {
+            if (!aristasDibujadas.contains(a)) {
+                dibujarArista(a); // Asegúrate de que esta función añada al canvas
+                aristasDibujadas.add(a);
+            }
+        }
+
+        // 3. DIBUJAR VERTICES
+        Set<Vertice> verticesDibujados = new HashSet<>();
+        for (Vertice v : vertices) {
+            if (!verticesDibujados.contains(v)) {
+                dibujarVertice(v); // Asegúrate de que esta función añada al canvas
+                verticesDibujados.add(v);
             }
         }
     }
@@ -164,48 +177,69 @@ public class MapaVisual {
         nodo.setCenterX(v.getX());
         nodo.setCenterY(v.getY());
 
-        if (v.getConstruccion() == null) {
-            // Slot vacío: Un punto gris sutil
-            nodo.setFill(Color.rgb(255, 255, 255, 0.3));
-            nodo.setStroke(Color.rgb(0, 0, 0, 0.2));
+        actualizarEstiloVertice(nodo, v);
 
-            // Animación simple de hover
-            nodo.setOnMouseEntered(e -> {
-                nodo.setRadius(12);
-                nodo.setFill(Color.WHITE);
-            });
-            nodo.setOnMouseExited(e -> {
-                nodo.setRadius(8);
-                nodo.setFill(Color.rgb(255, 255, 255, 0.3));
-            });
-        } else {
-            // Hay construcción: Aldea o Ciudad
-            Color colorJugador = obtenerColorJugador(v.getConstruccion().getPropietario());
-            nodo.setFill(colorJugador);
-            nodo.setStroke(Color.BLACK);
-            nodo.setStrokeWidth(2);
+        nodo.setOnMouseEntered(e -> {
+            if (modoActual != JuegoView.ModoConstruccion.NINGUNO)
+                nodo.setRadius(nodo.getRadius() + 3);
+        });
+        nodo.setOnMouseExited(e -> {
+            if (modoActual != JuegoView.ModoConstruccion.NINGUNO)
+                nodo.setRadius(nodo.getRadius() - 3);
+        });
 
-            if (v.getConstruccion() instanceof Ciudad) {
-                nodo.setRadius(15); // Las ciudades son más grandes
-                // Podrías usar un Polygon para que parezca una casita
+        nodo.setOnMouseClicked(e -> {
+            Jugador jugador = gestorTurnos.obtenerTurnoActual();
+            if (jugador == null) return;
+
+            boolean exito = false;
+            if (modoActual == JuegoView.ModoConstruccion.ALDEA) {
+
+                // En fase normal verificar carretera propia adyacente
+                if (!faseInicial) {
+                    boolean tieneCarreteraPropia = false;
+                    for (Arista a : ultimaListaAristas) {
+                        if (a.tieneCarretera() &&
+                                a.getCarretera().getPropietario() == jugador) {
+                            if (Math.hypot(a.getV1().getX() - v.getX(),
+                                    a.getV1().getY() - v.getY()) < 1.0 ||
+                                    Math.hypot(a.getV2().getX() - v.getX(),
+                                            a.getV2().getY() - v.getY()) < 1.0) {
+                                tieneCarreteraPropia = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!tieneCarreteraPropia) {
+                        System.out.println("Debes construir adyacente a tu carretera");
+                        return;
+                    }
+                }
+
+                exito = v.construirAldeaDirecto(jugador);
+                if (exito && callback != null) callback.onAldeaColocada();
+
+            } else if (modoActual == JuegoView.ModoConstruccion.CIUDAD) {
+                exito = v.mejorarACiudad(jugador);
             }
-        }
 
-        // Evento de construcción
-        nodo.setOnMouseClicked(e -> manejarClicVertice(v));
+            if (exito) actualizarEstiloVertice(nodo, v);
+        });
 
+        nodosVertices.put(v, nodo);
         canvas.getChildren().add(nodo);
     }
 
     private void manejarClicVertice(Vertice v) {
         Jugador actual = gestorTurnos.obtenerTurnoActual();
 
-        if (v.construirAldea(actual)) {
-            System.out.println("¡Aldea construida en el vértice " + v.getId() + "!");
-
-            renderizarMapa(ultimaListaHexagonos, ultimaListaVertices, ultimaListaAristas);
-        } else {
-            System.out.println("No puedes construir aquí. Revisa las reglas.");
+        if (v.getConstruccion() == null) {
+            if (v.puedeConstruirAldea(actual)) { // Debes crear este método en Vertice
+                v.construirAldea(actual);
+                System.out.println("¡Aldea construida por " + actual.getNombre() + "!");
+            } else {
+                System.out.println("No se puede construir una aldea aquí (Reglas/Recursos).");
+            }
         }
     }
 
@@ -218,36 +252,133 @@ public class MapaVisual {
         double y2 = a.getV2().getY();
 
         Line linea = new Line(x1, y1, x2, y2);
+        actualizarEstiloArista(linea, a);
 
-        // Se pinta solo si hay carretera
-        if (a.tieneCarretera()) {
-            linea.setStroke(obtenerColorJugador(a.getCarretera().getPropietario()));
-            linea.setStrokeWidth(6.0);
-        } else {
-            linea.setStroke(Color.rgb(200, 200, 200, 0.3));
-            linea.setStrokeWidth(3.0);
+        linea.setOnMouseEntered(e -> {
+            if (modoActual == JuegoView.ModoConstruccion.CAMINO && !a.tieneCarretera())
+                linea.setStrokeWidth(7);
+        });
+        linea.setOnMouseExited(e -> actualizarEstiloArista(linea, a));
 
-            // Efecto hover para indicar que es un lugar interactivo
-            linea.setOnMouseEntered(e -> linea.setStroke(Color.rgb(255, 255, 255, 0.6)));
-            linea.setOnMouseExited(e -> linea.setStroke(Color.rgb(200, 200, 200, 0.3)));
+        linea.setOnMouseClicked(e -> {
+            Jugador jugador = gestorTurnos.obtenerTurnoActual();
+            if (jugador == null) return;
 
-            // Clic para construir carretera:
-            // linea.setOnMouseClicked(e -> manejarClicArista(a));
-        }
+            if (modoActual == JuegoView.ModoConstruccion.CAMINO && !a.tieneCarretera()) {
 
+                // Buscar adyacencia por posición en lugar de por referencia
+                boolean adyacenteAConstruccion = false;
+                for (Vertice v : ultimaListaVertices) {
+                    if (v.getConstruccion() != null &&
+                            v.getConstruccion().getPropietario() == jugador) {
+                        if (Math.hypot(v.getX() - a.getV1().getX(), v.getY() - a.getV1().getY()) < 1.0 ||
+                                Math.hypot(v.getX() - a.getV2().getX(), v.getY() - a.getV2().getY()) < 1.0) {
+                            adyacenteAConstruccion = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Buscar adyacencia a carretera por posición
+                boolean adyacenteACarretera = false;
+                for (Arista otra : ultimaListaAristas) {
+                    if (otra != a && otra.tieneCarretera() &&
+                            otra.getCarretera().getPropietario() == jugador) {
+                        // Encontrar el vértice compartido entre las dos aristas
+                        double[] verticeCompartido = null;
+
+                        if (Math.hypot(otra.getV1().getX() - a.getV1().getX(),
+                                otra.getV1().getY() - a.getV1().getY()) < 1.0) {
+                            verticeCompartido = new double[]{a.getV1().getX(), a.getV1().getY()};
+                        } else if (Math.hypot(otra.getV1().getX() - a.getV2().getX(),
+                                otra.getV1().getY() - a.getV2().getY()) < 1.0) {
+                            verticeCompartido = new double[]{a.getV2().getX(), a.getV2().getY()};
+                        } else if (Math.hypot(otra.getV2().getX() - a.getV1().getX(),
+                                otra.getV2().getY() - a.getV1().getY()) < 1.0) {
+                            verticeCompartido = new double[]{a.getV1().getX(), a.getV1().getY()};
+                        } else if (Math.hypot(otra.getV2().getX() - a.getV2().getX(),
+                                otra.getV2().getY() - a.getV2().getY()) < 1.0) {
+                            verticeCompartido = new double[]{a.getV2().getX(), a.getV2().getY()};
+                        }
+
+                        if (verticeCompartido != null) {
+                            // Verificar que el vértice compartido no tenga construcción de otro jugador
+                            boolean bloqueado = false;
+                            for (Vertice v : ultimaListaVertices) {
+                                if (Math.hypot(v.getX() - verticeCompartido[0],
+                                        v.getY() - verticeCompartido[1]) < 1.0) {
+                                    if (v.getConstruccion() != null &&
+                                            v.getConstruccion().getPropietario() != jugador) {
+                                        bloqueado = true;
+                                    }
+                                    break;
+                                }
+                            }
+                            if (!bloqueado) {
+                                adyacenteACarretera = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (adyacenteAConstruccion || adyacenteACarretera) {
+                    a.construirCarretera(new Carretera(jugador));
+                    actualizarEstiloArista(linea, a);
+                    if (callback != null) callback.onCaminoColocado();
+                } else {
+                    System.out.println("Debes construir adyacente a tu aldea o carretera");
+                }
+            }
+        });
+        nodosAristas.put(a, linea);
         canvas.getChildren().add(linea);
     }
 
     private Color obtenerColorJugador(Jugador jugador) {
         if (jugador == null) return Color.GRAY;
-
-        // Asumiendo que tu Jugador tiene un nombre o ID
-        switch (jugador.getNombre().toLowerCase()) {
-            case "rojo": return Color.RED;
-            case "azul": return Color.BLUE;
-            case "verde": return Color.GREEN;
+        switch (jugador.getColor()) {
+            case "rojo":    return Color.RED;
+            case "azul":    return Color.BLUE;
+            case "verde":   return Color.GREEN;
             case "naranja": return Color.ORANGE;
-            default: return Color.WHITE;
+            default:        return Color.WHITE;
+        }
+    }
+
+    public void setModo(JuegoView.ModoConstruccion modo) {
+        this.modoActual = modo;
+    }
+
+    private void actualizarEstiloVertice(Circle nodo, Vertice v) {
+        if (v.getConstruccion() == null) {
+            nodo.setRadius(8);
+            nodo.setFill(Color.rgb(255, 255, 255, 0.3));
+            nodo.setStroke(Color.rgb(0, 0, 0, 0.2));
+            nodo.setStrokeWidth(1);
+        } else {
+            Color colorJugador = obtenerColorJugador(v.getConstruccion().getPropietario());
+            nodo.setFill(colorJugador);
+            nodo.setStroke(Color.DARKGRAY);
+            nodo.setStrokeWidth(2);
+            if (v.getConstruccion() instanceof Ciudad) {
+                nodo.setRadius(14);
+                nodo.setStroke(Color.BLACK);
+            } else {
+                nodo.setRadius(10);
+            }
+        }
+    }
+
+    private void actualizarEstiloArista(Line linea, Arista a) {
+        if (a.tieneCarretera()) {
+            linea.setStroke(obtenerColorJugador(a.getCarretera().getPropietario()));
+            linea.setStrokeWidth(6);
+            linea.setOpacity(1.0);
+        } else {
+            linea.setStroke(Color.rgb(200, 200, 200, 0.3));
+            linea.setStrokeWidth(3);
+            linea.setOpacity(1.0);
         }
     }
 }
