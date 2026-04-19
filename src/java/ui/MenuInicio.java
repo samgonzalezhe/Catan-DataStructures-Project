@@ -118,10 +118,12 @@ public class MenuInicio {
             for (int i = 0; i < nombres.size(); i++) {
                 // El nombre incluye el color para que obtenerColorJugador funcione
                 Jugador j = new Jugador(nombres.get(i));
-                j.setColor(colores[i].toLowerCase()); // ver nota abajo
+                j.setColor(colores[i].toLowerCase());
                 gestor.registrarJugador(j);
             }
-
+            System.out.println("Jugadores registrados:");
+            gestor.verOrdenDeTurnos();
+            System.out.println("Turno actual: " + gestor.obtenerTurnoActual().getNombre());
             new JuegoView(stage, gestor).iniciar();
         });
 
