@@ -26,7 +26,11 @@ public class GestorTurnos {
         return colaTurnos.getRondas();
     }
 
-    public void verOrdenDeTurnos() {
-        colaTurnos.mostrarLista();
-    }
+    public void verOrdenDeTurnos() { colaTurnos.mostrarLista(); }
+
+    public Jugador pasarTurnoReversa() { return colaTurnos.Reverse(); }
+
+    public boolean esUltimoJugador() { return colaTurnos.esUltimo(); }
+
+    public boolean esPrimerJugador() { return colaTurnos.esPrimero(); }
 }
