@@ -12,10 +12,10 @@ import javafx.scene.text.Text;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.effect.DropShadow;
-import logic.GestorTurnos;
-import logic.Jugador;
+import model.GestorTurnos;
+import model.Jugador;
 import model.*;
-import logic.TipoTerreno;
+import model.TipoTerreno;
 
 import java.util.*;
 
@@ -210,9 +210,24 @@ public class MapaVisual {
                             }
                         }
                     }
-                    if (!tieneCarreteraPropia) {
-                        System.out.println("Debes construir adyacente a tu carretera");
+                    // 🔴 VALIDAR RECURSOS (solo en fase normal)
+                    if (!faseInicial && !jugador.tieneRecursos(Aldea.COSTO)) {
+                        System.out.println("No tienes recursos para ALDEA");
                         return;
+                    }
+
+                    exito = v.construirAldeaDirecto(jugador);
+
+                    if (exito) {
+    // 🔴 COBRAR (solo en fase normal)
+                        if (!faseInicial) {
+                            jugador.gastarRecursos(Aldea.COSTO);
+                        }
+
+                        if (callback != null) {
+                            callback.onAldeaColocada();
+                            callback.onConstruccionRealizada(); // 🔥 NUEVO
+                        }
                     }
                 }
 
@@ -220,7 +235,21 @@ public class MapaVisual {
                 if (exito && callback != null) callback.onAldeaColocada();
 
             } else if (modoActual == JuegoView.ModoConstruccion.CIUDAD) {
+
+                if (!jugador.tieneRecursos(Ciudad.COSTO)) {
+                    System.out.println("No tienes recursos para CIUDAD");
+                    return;
+                }
+
                 exito = v.mejorarACiudad(jugador);
+
+                if (exito) {
+                    jugador.gastarRecursos(Ciudad.COSTO);
+
+                    if (callback != null) {
+                        callback.onConstruccionRealizada();
+                    }
+                }
             }
 
             if (exito) actualizarEstiloVertice(nodo, v);
@@ -323,9 +352,25 @@ public class MapaVisual {
                 }
 
                 if (adyacenteAConstruccion || adyacenteACarretera) {
+
+    // 🔴 VALIDAR RECURSOS (solo si no es fase inicial)
+                    if (!faseInicial && !jugador.tieneRecursos(Carretera.COSTO)) {
+                        System.out.println("No tienes recursos para CAMINO");
+                        return;
+                    }
+
                     a.construirCarretera(new Carretera(jugador));
                     actualizarEstiloArista(linea, a);
-                    if (callback != null) callback.onCaminoColocado();
+
+    // 🔴 COBRAR
+                    if (!faseInicial) {
+                        jugador.gastarRecursos(Carretera.COSTO);
+                    }
+
+                    if (callback != null) {
+                        callback.onCaminoColocado();
+                        callback.onConstruccionRealizada(); // 🔥 NUEVO
+                    }
                 } else {
                     System.out.println("Debes construir adyacente a tu aldea o carretera");
                 }
