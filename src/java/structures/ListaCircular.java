@@ -33,6 +33,25 @@ public class ListaCircular<T> extends Lista<T>{
         return actual.getDato();
     }
 
+    public T Reverse() {
+        if (isEmpty()) return null;
+
+        Nodo<T> anterior = head;
+        while (anterior.getSiguiente() != actual) {
+            anterior = anterior.getSiguiente();
+        }
+        actual = anterior;
+        return actual.getDato();
+    }
+
+    public boolean esUltimo() {
+        return actual == last;
+    }
+
+    public boolean esPrimero() {
+        return actual == head;
+    }
+
     public int getRondas() {
         return rondas;
     }
