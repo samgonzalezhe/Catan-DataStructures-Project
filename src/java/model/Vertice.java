@@ -91,6 +91,12 @@ public class Vertice {
     public double getX() { return pixelX; }
     public double getY() { return pixelY; }
 
+    public boolean construirAldeaDirecto(Jugador jugador) {
+        if (this.construccion != null) return false;
+        this.construccion = new Aldea(jugador);
+        return true;
+    }
+
     //Getters y setters
 
     public void setConstruccion(Construccion construccion) {
@@ -114,4 +120,3 @@ public class Vertice {
         return vecinos;
     }
 }
-
