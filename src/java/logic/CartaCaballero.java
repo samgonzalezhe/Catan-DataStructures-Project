@@ -13,11 +13,6 @@ public class CartaCaballero extends CartaDesarrollo {
 
     @Override
     public void realizarAccion(Jugador jugador, Object destino) {
-        if (destino instanceof Hexagono) {
-                Hexagono nuevoTile = (Hexagono) destino;
-                ladron.mover(nuevoTile);
-                System.out.println("¡Caballero usado! Ladrón movido al hexágono " + ladron.getPosicion());
-                this.setUsada(true);
-        }
+        this.setUsada(true);
     }
 }
