@@ -1,47 +1,42 @@
 package model;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.*;
+import javafx.geometry.Point2D;
+import logic.*;
+import structures.ArregloDinamico;
 import ui.TableroUtils;
 
+import java.util.*;
+
 public class MapaCatan {  //Atributos
-    
+
     private Map<HexCoord, Hexagono> mapa = new HashMap<>();
     // Cola para mezclar terrenos
     private Queue<TipoTerreno> bolsaTerrenos = new LinkedList<>();
     // Cola para números
     private Queue<Integer> bolsaNumeros = new LinkedList<>();
     private List<Vertice> vertices = new ArrayList<>();
-    private Set<Arista> aristas = new HashSet<>();
+    private List<Arista> aristas = new ArrayList<>();
     private Map<VertexKey, Vertice> mapaVertices = new HashMap<>();
-    
+
     private Ladron ladron;
-    private ArregloDinamico<Jugador> afectados = new ArregloDinamico<>(5);    
-    
+    private ArregloDinamico<Jugador> afectados = new ArregloDinamico<>(5);
+
+    private MazoDesarrollo mazo = new MazoDesarrollo();
+
     public MapaCatan() {   //Constructor
         inicializarTerrenos();
         inicializarNumeros();
-        generarMapaHexagonal();        
+        generarMapaHexagonal();
+
         generarVerticesReales();
-        generarAristasReales();           
-        inicializarLadron();     
-        
-        System.out.println("Vertices reales: " + vertices.size());
-        System.out.println("Aristas reales: " + aristas.size());
-        System.out.println("Hexagonos: " + mapa.size());
+        generarAristasReales();
+
+        inicializarLadron();
+        System.out.println("Total hexágonos en mapa: " + mapa.size());
+        System.out.println("Total hexágonos en lista: " + new ArrayList<>(mapa.values()).size());
     }
 
-    public Hexagono obtenerTileAleatorio() {
-
-        List<Hexagono> tiles = new ArrayList<>(mapa.values());
-
-        Random rand = new Random();
-
-        return tiles.get(rand.nextInt(tiles.size()));
-    }
-            //Metodos
+    //Metodos
     private void inicializarTerrenos() {
         agregarTerrenos(TipoTerreno.BOSQUE, 4);
         agregarTerrenos(TipoTerreno.COLINA, 3);
@@ -58,12 +53,12 @@ public class MapaCatan {  //Atributos
             bolsaTerrenos.add(tipo);
         }
     }
-    
+
     private void inicializarNumeros() {
         int[] numeros = {
-            2, 3, 3, 4, 4, 5, 5,
-            6, 6, 8, 8,
-            9, 9, 10, 10, 11, 11, 12
+                2, 3, 3, 4, 4, 5, 5,
+                6, 6, 8, 8,
+                9, 9, 10, 10, 11, 11, 12
         };
 
         for (int n : numeros) {
@@ -72,11 +67,11 @@ public class MapaCatan {  //Atributos
 
         mezclarCola((LinkedList<Integer>) bolsaNumeros);
     }
-    
+
     private <T> void mezclarCola(LinkedList<T> lista) {
         Collections.shuffle(lista);
     }
-        
+
     private List<HexCoord> generarCoordenadasHexagonales() {
         List<HexCoord> coords = new ArrayList<>();
 
@@ -93,7 +88,7 @@ public class MapaCatan {  //Atributos
 
         return coords;
     }
-        
+
     private void generarMapaHexagonal() {
         List<HexCoord> coords = generarCoordenadasHexagonales();
 
@@ -110,138 +105,76 @@ public class MapaCatan {  //Atributos
             mapa.put(coord, tt);
         }
     }
-    
+
     private void generarVerticesReales() {
-    int id = 0;
+        List<Vertice> listaGlobal = new ArrayList<>();
 
-    for (Hexagono tile : mapa.values()) {
+        for (Hexagono tile : mapa.values()) {
+            double[] centro = TableroUtils.hexToPixel(tile.coord);
 
-        double[] centro = TableroUtils.hexToPixel(tile.coord);
+            for (int i = 0; i < 6; i++) {
+                Point2D p = TableroUtils.getEsquinaHexagono(centro[0], centro[1], i);
 
-        for (int i = 0; i < 6; i++) {
+                // BÚSQUEDA POR PROXIMIDAD (Mucho más fiable que redondear Strings)
+                Vertice existente = null;
+                for (Vertice v : listaGlobal) {
+                    if (Math.hypot(v.getX() - p.getX(), v.getY() - p.getY()) < 1.0) {
+                        existente = v;
+                        break;
+                    }
+                }
 
-            double angle = Math.toRadians(60 * i);
+                if (existente == null) {
+                    Vertice nuevo = new Vertice(listaGlobal.size());
+                    nuevo.setPosicionPixeles(p.getX(), p.getY());
+                    listaGlobal.add(nuevo);
+                    existente = nuevo;
+                }
 
-            double x = centro[0] + TableroUtils.TAMAÑO * Math.cos(angle);
-            double y = centro[1] + TableroUtils.TAMAÑO * Math.sin(angle);
-
-            VertexKey key = new VertexKey(x, y);
-
-            Vertice v = mapaVertices.get(key);
-
-            if (v == null) {
-                v = new Vertice(id++);
-                v.setPosicionPixeles(x, y);
-                mapaVertices.put(key, v);
-                vertices.add(v);
+                existente.agregarTile(tile);
+                tile.agregarVertice(existente);
             }
-
-            v.agregarTile(tile);
-            tile.agregarVertice(v);
         }
+        this.vertices = listaGlobal;
     }
-}
-    
+
     private void generarAristasReales() {
-        int id = 0;
-        
+        this.aristas.clear();
+        int idArista = 0;
 
-        List<Vertice> lista = new ArrayList<>(mapaVertices.values());
+        // En lugar de comparar todos contra todos, recorremos cada hexágono
+        // y conectamos sus vértices adyacentes (0 con 1, 1 con 2... 5 con 0)
+        for (Hexagono hex : mapa.values()) {
+            List<Vertice> vHex = hex.getVertices();
 
-        for (int i = 0; i < lista.size(); i++) {
-            Vertice v1 = lista.get(i);
+            for (int i = 0; i < 6; i++) {
+                Vertice v1 = vHex.get(i);
+                Vertice v2 = vHex.get((i + 1) % 6); // El siguiente vértice (circular)
 
-            for (int j = i + 1; j < lista.size(); j++) {
-                Vertice v2 = lista.get(j);
-
-            // 1. Calcular distancia (SIEMPRE fuera de condiciones)
-                double dx = v1.getX() - v2.getX();
-                double dy = v1.getY() - v2.getY();
-                double distancia = Math.sqrt(dx * dx + dy * dy);
-
-            // 2. Contar hexágonos compartidos
-                int comunes = 0;
-                for (Hexagono t : v1.getTilesAdyacentes()) {
-                    if (v2.getTilesAdyacentes().contains(t)) {
-                        comunes++;
+                // Verificar si esta arista ya fue creada por otro hexágono vecino
+                Arista existente = null;
+                for (Arista a : aristas) {
+                    if ((a.getV1() == v1 && a.getV2() == v2) || (a.getV1() == v2 && a.getV2() == v1)) {
+                        existente = a;
+                        break;
                     }
                 }
 
-            // 3. Clasificar tipo de arista
-                boolean esInterna = comunes == 2;
-                boolean esBorde = comunes == 1;
-
-            // 4. Validación final
-                if ((esInterna || esBorde) &&
-                    distancia < TableroUtils.TAMAÑO * 1.1) {
-
-                // 5. Evitar duplicados
-                    boolean existe = false;
-
-                    for (Arista a : aristas) {
-                        if ((a.getV1() == v1 && a.getV2() == v2) ||
-                            (a.getV1() == v2 && a.getV2() == v1)) {
-                            existe = true;
-                            break;
-                        }
-                    }
-
-                    if (!existe) {
-                        Arista nueva = new Arista(id++, v1, v2);
-                        aristas.add(nueva);
-
-                    // 6. Vecinos (una sola vez)
-                        v1.agregarVecino(v2);
-                        v2.agregarVecino(v1);
-
-                    // 7. Asociar a hexágonos
-                        for (Hexagono tile : mapa.values()) {
-                            if (tile.getVertices().contains(v1) &&
-                                tile.getVertices().contains(v2)) {
-
-                                tile.agregarArista(nueva);
-                            }
-                        }
-                    }
+                if (existente == null) {
+                    Arista nueva = new Arista(idArista++, v1, v2);
+                    this.aristas.add(nueva);
+                    hex.agregarArista(nueva);
+                    // Establecer vecindad entre vértices
+                    v1.agregarVecino(v2);
+                    v2.agregarVecino(v1);
+                } else {
+                    // Si ya existe, solo la vinculamos a este hexágono también
+                    hex.agregarArista(existente);
                 }
             }
         }
     }
 
-    public void mostrarVertices() {
-
-        for (int i = 0; i < vertices.size(); i++) {
-
-            Vertice v = vertices.get(i);
-
-            System.out.print(i + ": ");
-
-            if (v.getConstruccion() == null) {
-                System.out.println("Libre");
-            } else {
-                System.out.println("Ocupado por " + v.getConstruccion().getPropietario().getNombre());
-            }
-        }
-    }
-
-    public void mostrarAristas() {
-
-        int i = 0;
-
-        for (Arista a : aristas) {
-
-            System.out.print(i + ": ");
-
-            if (a.getConstruccion() == null) {
-                System.out.println("Libre");
-            } else {
-                System.out.println("Ocupada");
-            }
-
-            i++;
-        }
-    }
-    
     public void imprimirMapa() {
         System.out.println("MAPA HEXAGONAL DE CATAN:\n");
 
@@ -249,10 +182,10 @@ public class MapaCatan {  //Atributos
             System.out.println(tt);
         }
     }
-    
+
     public void imprimirVertices() {
-            for (Vertice v : vertices) {
-                System.out.println("Vertice " + v.getId() +
+        for (Vertice v : vertices) {
+            System.out.println("Vertice " + v.getId() +
                     " vecinos: " + v.getVecinos().size());
         }
     }
@@ -260,36 +193,31 @@ public class MapaCatan {  //Atributos
     public void imprimirAristas() {
         for (Arista a : aristas) {
             System.out.println("Arista " + a.getId() +
-                ": V" + a.getV1().getId() +
-                " - V" + a.getV2().getId());
+                    ": V" + a.getV1().getId() +
+                    " - V" + a.getV2().getId());
         }
     }
-    
+
     public Map<HexCoord, Hexagono> getMapa() {
         return mapa;
     }
-    
-    public Set<Arista> getAristas(){
+
+    public List<Arista> getAristas() {
         return aristas;
     }
-    
+
     public List<Vertice> getVertices() {
         return vertices;
     }
-    
+
     public Vertice getVertice(int index) {
-
-        if (index >= 0 && index < vertices.size()) {
-            return vertices.get(index);
-        }
-
-        return null;
+        return vertices.get(index);
     }
 
     public Arista getArista(int index) {
-        return new ArrayList<>(aristas).get(index);
+        return aristas.get(index);
     }
-    
+
     private void inicializarLadron() {
 
         for (Hexagono t : mapa.values()) {
@@ -299,52 +227,44 @@ public class MapaCatan {  //Atributos
             }
         }
     }
-        
+
     public void moverLadron(Hexagono nuevoTile) {
         ladron.mover(nuevoTile);
     }
-    
-    public void producirRecursos(int numero) {
+
+    public String producirRecursos(int numero) {
+        StringBuilder resumen = new StringBuilder();
 
         for (Hexagono tile : mapa.values()) {
-
             if (tile.numero == numero && tile != ladron.getPosicion()) {
                 for (Vertice v : vertices) {
-
                     if (v.getTilesAdyacentes().contains(tile)) {
-
                         Construccion c = v.getConstruccion();
-
                         if (c != null) {
-
                             Jugador jugador = c.getPropietario();
-
                             int cantidad = 0;
-
-                            if (c instanceof Aldea) {
-                                cantidad = 1;
-                            } else if (c instanceof Ciudad) {
-                                cantidad = 2;
-                            }
+                            if (c instanceof Aldea) cantidad = 1;
+                            else if (c instanceof Ciudad) cantidad = 2;
 
                             Recurso recurso = tile.getRecurso();
-
                             if (recurso != null) {
                                 jugador.agregarRecurso(recurso, cantidad);
-
-                                System.out.println(
-                                    jugador.getNombre() +
-                                    " recibe " + cantidad +
-                                    " de " + recurso
-        );
-    }
+                                resumen.append(jugador.getNombre())
+                                        .append(" recibe ")
+                                        .append(cantidad)
+                                        .append(" ")
+                                        .append(recurso)
+                                        .append("\n");
+                            }
                         }
                     }
                 }
             }
         }
+
+        return resumen.length() > 0 ? resumen.toString() : "Nadie recibe recursos";
     }
-    
+
     public List<Jugador> getJugadoresEnTile(Hexagono tile) {
 
         List<Jugador> jugadores = new ArrayList<>();
@@ -367,42 +287,80 @@ public class MapaCatan {  //Atributos
 
         return jugadores;
     }
-    
-    public void robarRecurso(Jugador ladrónJugador, Hexagono tile) {
 
+    public String robarRecurso(Jugador ladronJugador, Hexagono tile) {
         List<Jugador> jugadores = getJugadoresEnTile(tile);
+        jugadores.remove(ladronJugador);
 
-    // Quitar al mismo jugador
-        jugadores.remove(ladrónJugador);
+        if (jugadores.isEmpty()) return ladronJugador.getNombre() + " movió el ladrón\n(nadie para robar)";
 
-        if (jugadores.isEmpty()) {
-            System.out.println("No hay jugadores para robar.");
-            return;
-        }
-
-    // Elegir víctima aleatoria
         Random rand = new Random();
         Jugador victima = jugadores.get(rand.nextInt(jugadores.size()));
-
         Recurso robado = victima.quitarRecursoAleatorio();
 
         if (robado != null) {
-            ladrónJugador.agregarRecurso(robado, 1);
-
-            System.out.println(
-                ladrónJugador.getNombre() +
-                " robó " + robado +
-                " a " + victima.getNombre()
-            );
+            ladronJugador.agregarRecurso(robado, 1);
+            return "🗡 " + ladronJugador.getNombre() + " robó " + robado + " a " + victima.getNombre();
         } else {
-            System.out.println("La víctima no tenía recursos.");
+            return "🗡 " + ladronJugador.getNombre() + " movió el ladrón\n(" + victima.getNombre() + " no tenía recursos)";
         }
     }
-        
-    public void moverLadronYRobar(Jugador jugador, Hexagono nuevoTile) {
 
+    public String moverLadronYRobar(Jugador jugador, Hexagono nuevoTile) {
         ladron.mover(nuevoTile);
+        return robarRecurso(jugador, nuevoTile);
+    }
 
-        robarRecurso(jugador, nuevoTile);
+    public Ladron getLadron() {
+        return ladron;
+    }
+
+    public int calcularPuntos(Jugador jugador) {
+        int puntos = 0;
+        for (Vertice v : vertices) {
+            if (v.getConstruccion() != null &&
+                    v.getConstruccion().getPropietario() == jugador) {
+                puntos += v.getConstruccion().getPuntosVictoria();
+            }
+        }
+        return puntos;
+    }
+
+    public Jugador verificarVictoria() {
+        for (Jugador jugador : obtenerJugadores()) {
+            if (calcularPuntos(jugador) >= 10) {
+                return jugador;
+            }
+        }
+        return null;
+    }
+
+    public List<Jugador> obtenerJugadores() {
+        List<Jugador> jugadores = new ArrayList<>();
+        for (Vertice v : vertices) {
+            if (v.getConstruccion() != null) {
+                Jugador j = v.getConstruccion().getPropietario();
+                if (!jugadores.contains(j)) {
+                    jugadores.add(j);
+                }
+            }
+        }
+        return jugadores;
+    }
+
+    public MazoDesarrollo getMazo() { return mazo; }
+
+    public CartaDesarrollo comprarCartaDesarrollo(Jugador jugador) {
+        if (!jugador.tieneRecursos(CartaDesarrollo.COSTO)) {
+            System.out.println("No tienes recursos para comprar carta");
+            return null;
+        }
+        CartaDesarrollo carta = mazo.robarCarta();
+        if (carta == null) {
+            System.out.println("El mazo está vacío");
+            return null;
+        }
+        jugador.gastarRecursos(CartaDesarrollo.COSTO);
+        return carta;
     }
 }
