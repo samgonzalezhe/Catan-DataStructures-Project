@@ -1,5 +1,6 @@
 package ui;
 
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
@@ -12,10 +13,10 @@ import javafx.scene.text.Text;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.effect.DropShadow;
-import model.GestorTurnos;
-import model.Jugador;
+import logic.GestorTurnos;
+import logic.Jugador;
 import model.*;
-import model.TipoTerreno;
+import logic.TipoTerreno;
 
 import java.util.*;
 
@@ -33,6 +34,11 @@ public class MapaVisual {
     private Map<Arista, Line> nodosAristas = new HashMap<>();
     private JuegoView.CallbackConstruccion callback;
     private boolean faseInicial = true;
+    private boolean modoLadron = false;
+    private ImageView imagenLadron = null;
+    private java.util.function.Consumer<Jugador> callbackVictoria;
+    private MapaCatan logicaCatan;
+    private int caminosGratis = 0;
 
 
     public MapaVisual(Pane canvas, GestorTurnos gestor) {
@@ -48,6 +54,14 @@ public class MapaVisual {
 
     public void setFaseInicial(boolean faseInicial) {
         this.faseInicial = faseInicial;
+    }
+
+    public void setCallbackVictoria(java.util.function.Consumer<Jugador> callback) {
+        this.callbackVictoria = callback;
+    }
+
+    public void setCaminosGratis(int cantidad) {
+        this.caminosGratis = cantidad;
     }
 
     private void cargarTexturas() {
@@ -149,12 +163,21 @@ public class MapaVisual {
             }
         }
 
-        // 3. DIBUJAR VERTICES
+        // DIBUJAR VERTICES
         Set<Vertice> verticesDibujados = new HashSet<>();
         for (Vertice v : vertices) {
             if (!verticesDibujados.contains(v)) {
                 dibujarVertice(v); // Asegúrate de que esta función añada al canvas
                 verticesDibujados.add(v);
+            }
+        }
+
+        if (ultimaListaHexagonos != null) {
+            for (Hexagono hex : ultimaListaHexagonos) {
+                if (hex.tieneLadron()) {
+                    dibujarLadron(hex);
+                    break;
+                }
             }
         }
     }
@@ -193,10 +216,16 @@ public class MapaVisual {
             if (jugador == null) return;
 
             boolean exito = false;
-            if (modoActual == JuegoView.ModoConstruccion.ALDEA) {
 
-                // En fase normal verificar carretera propia adyacente
-                if (!faseInicial) {
+            if (modoActual == JuegoView.ModoConstruccion.ALDEA) {
+                if (faseInicial) {
+                    // Fase inicial: sin validaciones
+                    exito = v.construirAldeaDirecto(jugador);
+                    if (exito && callback != null) {
+                        callback.onAldeaColocada();
+                    }
+                } else {
+                    // Fase normal: validar carretera
                     boolean tieneCarreteraPropia = false;
                     for (Arista a : ultimaListaAristas) {
                         if (a.tieneCarretera() &&
@@ -210,49 +239,46 @@ public class MapaVisual {
                             }
                         }
                     }
-                    // 🔴 VALIDAR RECURSOS (solo en fase normal)
-                    if (!faseInicial && !jugador.tieneRecursos(Aldea.COSTO)) {
+
+                    if (!tieneCarreteraPropia) {
+                        System.out.println("Debes construir adyacente a tu carretera");
+                        return;
+                    }
+
+                    if (!jugador.tieneRecursos(Aldea.COSTO)) {
                         System.out.println("No tienes recursos para ALDEA");
                         return;
                     }
 
                     exito = v.construirAldeaDirecto(jugador);
-
                     if (exito) {
-    // 🔴 COBRAR (solo en fase normal)
-                        if (!faseInicial) {
-                            jugador.gastarRecursos(Aldea.COSTO);
-                        }
-
+                        jugador.gastarRecursos(Aldea.COSTO);
                         if (callback != null) {
                             callback.onAldeaColocada();
-                            callback.onConstruccionRealizada(); // 🔥 NUEVO
+                            callback.onConstruccionRealizada();
                         }
                     }
                 }
 
-                exito = v.construirAldeaDirecto(jugador);
-                if (exito && callback != null) callback.onAldeaColocada();
-
             } else if (modoActual == JuegoView.ModoConstruccion.CIUDAD) {
-
                 if (!jugador.tieneRecursos(Ciudad.COSTO)) {
                     System.out.println("No tienes recursos para CIUDAD");
                     return;
                 }
-
                 exito = v.mejorarACiudad(jugador);
-
                 if (exito) {
                     jugador.gastarRecursos(Ciudad.COSTO);
-
-                    if (callback != null) {
-                        callback.onConstruccionRealizada();
-                    }
+                    if (callback != null) callback.onConstruccionRealizada();
                 }
             }
 
-            if (exito) actualizarEstiloVertice(nodo, v);
+            if (exito) {
+                actualizarEstiloVertice(nodo, v);
+                if (callbackVictoria != null) {
+                    Jugador ganador = logicaCatan.verificarVictoria();
+                    if (ganador != null) callbackVictoria.accept(ganador);
+                }
+            }
         });
 
         nodosVertices.put(v, nodo);
@@ -352,30 +378,36 @@ public class MapaVisual {
                 }
 
                 if (adyacenteAConstruccion || adyacenteACarretera) {
-
-    // 🔴 VALIDAR RECURSOS (solo si no es fase inicial)
-                    if (!faseInicial && !jugador.tieneRecursos(Carretera.COSTO)) {
-                        System.out.println("No tienes recursos para CAMINO");
-                        return;
-                    }
-
-                    a.construirCarretera(new Carretera(jugador));
-                    actualizarEstiloArista(linea, a);
-
-    // 🔴 COBRAR
-                    if (!faseInicial) {
-                        jugador.gastarRecursos(Carretera.COSTO);
-                    }
-
-                    if (callback != null) {
-                        callback.onCaminoColocado();
-                        callback.onConstruccionRealizada(); // 🔥 NUEVO
+                    if (caminosGratis > 0) {
+                        // Camino gratis - sin costo
+                        a.construirCarretera(new Carretera(jugador));
+                        actualizarEstiloArista(linea, a);
+                        caminosGratis--;
+                        if (callback != null) {
+                            callback.onCaminoColocado();
+                            callback.onConstruccionRealizada();
+                        }
+                    } else {
+                        // Camino normal con costo
+                        if (!faseInicial && !jugador.tieneRecursos(Carretera.COSTO)) {
+                            System.out.println("No tienes recursos para CAMINO");
+                            return;
+                        }
+                        a.construirCarretera(new Carretera(jugador));
+                        actualizarEstiloArista(linea, a);
+                        if (!faseInicial) jugador.gastarRecursos(Carretera.COSTO);
+                        if (callback != null) {
+                            callback.onCaminoColocado();
+                            callback.onConstruccionRealizada();
+                        }
                     }
                 } else {
                     System.out.println("Debes construir adyacente a tu aldea o carretera");
                 }
             }
         });
+
+
         nodosAristas.put(a, linea);
         canvas.getChildren().add(linea);
     }
@@ -425,5 +457,76 @@ public class MapaVisual {
             linea.setStrokeWidth(3);
             linea.setOpacity(1.0);
         }
+    }
+
+    public void setModoLadron(boolean valor) {
+        this.modoLadron = valor;
+    }
+
+    public void dibujarLadron(Hexagono hex) {
+        if (imagenLadron != null) {
+            canvas.getChildren().remove(imagenLadron);
+        }
+        double[] pos = TableroUtils.hexToPixel(hex.coord);
+        javafx.scene.image.Image img = new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/ladronCatan.png")
+        );
+        imagenLadron = new javafx.scene.image.ImageView(img);
+        imagenLadron.setFitWidth(40);
+        imagenLadron.setFitHeight(40);
+        imagenLadron.setLayoutX(pos[0] - 20);
+        imagenLadron.setLayoutY(pos[1] - 20);
+        imagenLadron.setMouseTransparent(true);
+        canvas.getChildren().add(imagenLadron);
+    }
+
+    public void resaltarHexagonosParaLadron(MapaCatan logicaCatan, Jugador jugador,
+                                            java.util.function.Consumer<Hexagono> callback) {
+        // Recorrer todos los hexágonos y hacerlos clickeables
+        for (javafx.scene.Node nodo : canvas.getChildren()) {
+            if (nodo instanceof Polygon) {
+                nodo.setOpacity(0.7);
+            }
+        }
+
+        // Agregar overlays clickeables sobre cada hexágono
+        for (Hexagono hex : logicaCatan.getMapa().values()) {
+            double[] pos = TableroUtils.hexToPixel(hex.coord);
+
+            // No permitir mover al mismo hexágono donde ya está
+            if (hex.tieneLadron()) continue;
+
+            Circle overlay = new Circle(40);
+            overlay.setCenterX(pos[0]);
+            overlay.setCenterY(pos[1]);
+            overlay.setFill(javafx.scene.paint.Color.rgb(255, 50, 50, 0.3));
+            overlay.setStroke(javafx.scene.paint.Color.RED);
+            overlay.setStrokeWidth(2);
+
+            overlay.setOnMouseEntered(e -> overlay.setFill(
+                    javafx.scene.paint.Color.rgb(255, 50, 50, 0.6)));
+            overlay.setOnMouseExited(e -> overlay.setFill(
+                    javafx.scene.paint.Color.rgb(255, 50, 50, 0.3)));
+
+            overlay.setOnMouseClicked(e -> {
+                // Limpiar overlays
+                canvas.getChildren().removeIf(n ->
+                        n instanceof Circle && ((Circle)n).getStroke() == javafx.scene.paint.Color.RED
+                                && ((Circle)n).getRadius() == 40);
+
+                // Restaurar opacidad
+                for (javafx.scene.Node n : canvas.getChildren()) {
+                    n.setOpacity(1.0);
+                }
+
+                callback.accept(hex);
+            });
+
+            canvas.getChildren().add(overlay);
+        }
+    }
+
+    public void setLogicaCatan(MapaCatan logicaCatan) {
+        this.logicaCatan = logicaCatan;
     }
 }
