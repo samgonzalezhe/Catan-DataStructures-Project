@@ -1,9 +1,18 @@
 package logic;
 
+import java.util.Map;
+
 public abstract class CartaDesarrollo {
     private String nombre;
     private String descripcion;
     private boolean usada;
+
+    //Costo cartas
+    public static final Map<Recurso, Integer> COSTO = Map.of(
+            Recurso.TRIGO, 1,
+            Recurso.OVEJA, 1,
+            Recurso.PIEDRA, 1
+    );
 
     public CartaDesarrollo(String nombre, String descripcion) {
         this.nombre = nombre;
@@ -23,3 +32,4 @@ public abstract class CartaDesarrollo {
         return "[" + nombre + "]: " + descripcion;
     }
 }
+
