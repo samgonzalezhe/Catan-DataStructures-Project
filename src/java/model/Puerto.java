@@ -1,9 +1,11 @@
-package com.mycompany.catan;
+package model;
+
+import logic.TipoTerreno;
 
 public class Puerto {
 
-    private TipoTerreno tipoEspecial; 
-    private int tasaIntercambio; 
+    private TipoTerreno tipoEspecial;
+    private int tasaIntercambio;
 
     public Puerto(int tasaIntercambio) {
         this.tasaIntercambio = tasaIntercambio;
