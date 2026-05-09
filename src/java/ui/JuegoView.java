@@ -12,6 +12,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import logic.*;
+import logic.bot.BotJugador;
 import model.*;
 import javafx.geometry.Pos;
 import javafx.scene.image.Image;
@@ -40,12 +41,23 @@ public class JuegoView {
     //Manejar direccion turnos
     private boolean rondaInversa = false;
 
+    //Bots
+    private List<Boolean> esBots;
+    private List<BotJugador> bots = new ArrayList<>();
+
     private MapaCatan logicaCatan;
 
     private Map<Recurso, Label> labelsRecursos = new HashMap<>();
     private Map<Recurso, HBox> filasRecursos = new HashMap<>();
     private VBox inventarioPanel;
     private Label bannerRecursos;
+    private Label totalLabel;
+    private javafx.scene.canvas.Canvas canvasDado1;
+    private javafx.scene.canvas.Canvas canvasDado2;
+    private List<Label> tarjetasJugadores;
+    private List<String> nombresJugadores;
+    private final String[] coloresJugador = {"#C0392B", "#2471A3", "#1E8449", "#D68910"};
+
 
     private final String estiloBotonConstruir =
             "-fx-background-color: #1A0F0A;" +
@@ -78,11 +90,14 @@ public class JuegoView {
     private Button botonDado;
     private Button botonFinTurno;
     private Button botonVerCartas;
+    private Button btnComprarCarta;
+    private Button btnIntercambio;
     private Label labelFase;
 
-    public JuegoView(Stage stage, GestorTurnos gestor) {
+    public JuegoView(Stage stage, GestorTurnos gestor, List<Boolean> esBots) {
         this.stage = stage;
         this.gestor = gestor;
+        this.esBots = esBots;
     }
 
     public interface CallbackConstruccion {
@@ -176,6 +191,22 @@ public class JuegoView {
             double yPromedio = v.getTilesAdyacentes().stream()
                     .mapToDouble(t -> TableroUtils.hexToPixel(t.coord)[1]).average().orElse(0);
             v.setPosicionPixeles(xPromedio, yPromedio);
+        }
+
+        // Crear bots para los jugadores que lo sean
+        List<Jugador> todosJugadores = obtenerListaJugadores();
+        for (int i = 0; i < 4; i++) {
+            if (esBots.get(i)) {
+                BotJugador bot = new BotJugador(
+                        todosJugadores.get(i),
+                        this.logicaCatan,
+                        this.gestor,
+                        this.listaVertices,
+                        this.listaAristas
+                );
+                bots.add(bot);
+                System.out.println("Bot creado para: " + todosJugadores.get(i).getNombre());
+            }
         }
 
         mapaVisual.renderizarMapa(hexagonos, listaVertices, listaAristas);
@@ -273,9 +304,8 @@ public class JuegoView {
 
 
         // --- TARJETAS DE JUGADORES ---
-        String[] coloresJugador = {"#C0392B", "#2471A3", "#1E8449", "#D68910"};
-        List<Label> tarjetasJugadores = new ArrayList<>();
-        List<String> nombresJugadores = new ArrayList<>();
+        tarjetasJugadores = new ArrayList<>();
+        nombresJugadores = new ArrayList<>();
 
         Jugador jugadorActualTemp = this.gestor.obtenerTurnoActual();
         for (int i = 0; i < 4; i++) {
@@ -322,14 +352,14 @@ public class JuegoView {
         HBox dadosBox = new HBox(10);
         dadosBox.setAlignment(javafx.geometry.Pos.CENTER);
 
-        javafx.scene.canvas.Canvas canvasDado1 = new javafx.scene.canvas.Canvas(55, 55);
-        javafx.scene.canvas.Canvas canvasDado2 = new javafx.scene.canvas.Canvas(55, 55);
+        canvasDado1 = new javafx.scene.canvas.Canvas(55, 55);
+        canvasDado2 = new javafx.scene.canvas.Canvas(55, 55);
         dibujarDado(canvasDado1, 1);
         dibujarDado(canvasDado2, 1);
 
         dadosBox.getChildren().addAll(canvasDado1, canvasDado2);
 
-        Label totalLabel = new Label("Total: —");
+        totalLabel = new Label("Total: —");
         totalLabel.setStyle(
                 "-fx-text-fill: #C4956A;" +
                         "-fx-font-family: 'Georgia';" +
@@ -413,7 +443,7 @@ public class JuegoView {
                         "-fx-font-weight: bold;"
         );
 
-        Button btnComprarCarta = new Button("Comprar carta");
+        btnComprarCarta = new Button("Comprar carta");
         btnComprarCarta.setMaxWidth(Double.MAX_VALUE);
         btnComprarCarta.setStyle(estiloBotonConstruir);
 
@@ -450,8 +480,10 @@ public class JuegoView {
                 mostrarResumenRecursos(resumen, resultado);
             }
 
-            botonDado.setDisable(true);
-            botonFinTurno.setDisable(false);
+            btnAldea.setDisable(!gestor.obtenerTurnoActual().tieneRecursos(Aldea.COSTO));
+            btnCiudad.setDisable(!gestor.obtenerTurnoActual().tieneRecursos(Ciudad.COSTO));
+            btnCamino.setDisable(!gestor.obtenerTurnoActual().tieneRecursos(Carretera.COSTO));
+            btnComprarCarta.setDisable(!gestor.obtenerTurnoActual().tieneRecursos(CartaDesarrollo.COSTO));
         });
 
         botonFinTurno.setMaxWidth(Double.MAX_VALUE);
@@ -517,47 +549,58 @@ public class JuegoView {
                     }
                 }
 
-                // Resetear para siguiente jugador
-                btnAldea.setDisable(false);
-                btnCamino.setDisable(true);
-                botonFinTurno.setDisable(true);
-                btnAldea.setStyle(estiloBotonActivo);
-                btnCamino.setStyle(estiloBotonConstruir);
-                modoActual = ModoConstruccion.ALDEA;
-                mapaVisual.setModo(ModoConstruccion.ALDEA);
+                if (obtenerBotActual() != null) {
+                    deshabilitarControlesParaBot();
+                    ejecutarFaseInicialBot();
+                } else {
+                    btnAldea.setDisable(false);
+                    btnCamino.setDisable(true);
+                    botonFinTurno.setDisable(true);
+                    btnAldea.setStyle(estiloBotonActivo);
+                    btnCamino.setStyle(estiloBotonConstruir);
+                    modoActual = ModoConstruccion.ALDEA;
+                    mapaVisual.setModo(ModoConstruccion.ALDEA);
+                }
 
             } else {
                 // Turno normal
                 this.gestor.pasarTurno();
                 actualizarTarjetas(tarjetasJugadores, nombresJugadores,
-                    this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                        this.gestor.obtenerTurnoActual().getNombre(), coloresJugador);
                 totalLabel.setText("Total: —");
                 dibujarDado(canvasDado1, 1);
                 dibujarDado(canvasDado2, 1);
-                botonDado.setDisable(false);
-                botonFinTurno.setDisable(true);
-                botonFinTurno.setStyle(
-                    "-fx-background-color: #1A4A1A;" +
-                            "-fx-text-fill: #D4A843;" +
-                            "-fx-font-family: 'Georgia';" +
-                            "-fx-font-size: 13px;" +
-                            "-fx-font-weight: bold;" +
-                            "-fx-border-color: #D4A843;" +
-                            "-fx-border-width: 1;" +
-                            "-fx-border-radius: 4;" +
-                            "-fx-background-radius: 4;" +
-                            "-fx-padding: 8 14;" +
-                            "-fx-cursor: hand;" +
-                            "-fx-opacity: 0.5;"
-                );
+                actualizarInventario();
+                actualizarColorInventario();
                 modoActual = ModoConstruccion.NINGUNO;
                 mapaVisual.setModo(ModoConstruccion.NINGUNO);
-                btnAldea.setDisable(false);
-                btnCiudad.setDisable(false);
-                btnCamino.setDisable(false);
-                btnAldea.setStyle(estiloBotonConstruir);
-                btnCiudad.setStyle(estiloBotonConstruir);
-                btnCamino.setStyle(estiloBotonConstruir);
+                botonFinTurno.setStyle(
+                        "-fx-background-color: #1A4A1A;" +
+                                "-fx-text-fill: #D4A843;" +
+                                "-fx-font-family: 'Georgia';" +
+                                "-fx-font-size: 13px;" +
+                                "-fx-font-weight: bold;" +
+                                "-fx-border-color: #D4A843;" +
+                                "-fx-border-width: 1;" +
+                                "-fx-border-radius: 4;" +
+                                "-fx-background-radius: 4;" +
+                                "-fx-padding: 8 14;" +
+                                "-fx-cursor: hand;" +
+                                "-fx-opacity: 0.5;"
+                );
+
+                if (obtenerBotActual() != null) {
+                    deshabilitarControlesParaBot();
+                    ejecutarTurnoBot();
+                } else {
+                    btnAldea.setDisable(false);
+                    btnCamino.setDisable(true);
+                    botonFinTurno.setDisable(true);
+                    btnAldea.setStyle(estiloBotonActivo);
+                    btnCamino.setStyle(estiloBotonConstruir);
+                    modoActual = ModoConstruccion.ALDEA;
+                    mapaVisual.setModo(ModoConstruccion.ALDEA);
+                }
             }
         });
 
@@ -678,7 +721,7 @@ public class JuegoView {
                         "-fx-font-weight: bold;"
         );
 
-        Button btnIntercambio = new Button("Proponer intercambio");
+        btnIntercambio = new Button("Proponer intercambio");
         btnIntercambio.setMaxWidth(Double.MAX_VALUE);
         btnIntercambio.setStyle(estiloBotonConstruir);
         btnIntercambio.setOnAction(e -> mostrarSelectorJugador());
@@ -689,6 +732,11 @@ public class JuegoView {
         root.getChildren().add(inventarioPanel);
         actualizarInventario();
         actualizarColorInventario();
+
+        // Si el primer jugador es bot, iniciar fase inicial bot
+        if (obtenerBotActual() != null) {
+            javafx.application.Platform.runLater(() -> ejecutarFaseInicialBot());
+        }
 
         Scene scene = new Scene(root, 900, 700);
         stage.setTitle("Catan");
@@ -761,22 +809,18 @@ public class JuegoView {
 
     private void habilitarBotonesFaseNormal(Button btnAldea, Button btnCiudad,
                                             Button btnCamino, Button botonDado) {
-        btnAldea.setDisable(false);
-        btnCiudad.setDisable(false);
-        btnCamino.setDisable(false);
-        botonDado.setDisable(false);
-        botonFinTurno.setDisable(true);
-
-        // Resetear estilos
-        btnAldea.setStyle(estiloBotonConstruir);
-        btnCiudad.setStyle(estiloBotonConstruir);
-        btnCamino.setStyle(estiloBotonConstruir);
-
+        mapaVisual.setFaseInicial(false);
         // Resetear modo
         modoActual = ModoConstruccion.NINGUNO;
         mapaVisual.setModo(ModoConstruccion.NINGUNO);
-
         labelFase.setText("¡Fase normal!\nTira los dados");
+
+        if (obtenerBotActual() != null) {
+            deshabilitarControlesParaBot();
+            javafx.application.Platform.runLater(() -> ejecutarTurnoBot());
+        } else {
+            habilitarControlesParaHumano();
+        }
     }
 
     private void crearPanelInfo(Pane root) {
@@ -1705,6 +1749,27 @@ public class JuegoView {
             mostrarMensaje("Intercambio rechazado", root);
         });
 
+        if (esBotJugador(intercambio.getReceptor())) {
+            BotJugador bot = getBotDeJugador(intercambio.getReceptor());
+            boolean acepta = bot.evaluarIntercambio(
+                    intercambio.getOferta(),  // lo que el bot recibe
+                    intercambio.getPedido()   // lo que el bot entrega
+            );
+
+            if (acepta) {
+                boolean exito = intercambio.ejecutar();
+                actualizarInventario();
+                mostrarMensaje(exito ?
+                        "✓ " + intercambio.getReceptor().getNombre() +
+                                " aceptó el intercambio" :
+                        "Intercambio fallido", root);
+            } else {
+                mostrarMensaje("✗ " + intercambio.getReceptor().getNombre() +
+                        " rechazó el intercambio", root);
+            }
+            return;
+        }
+
         botones.getChildren().addAll(btnAceptar, btnRechazar);
         panel.getChildren().addAll(titulo, resumenOferta, resumenPedido, botones);
         root.getChildren().add(panel);
@@ -1763,5 +1828,212 @@ public class JuegoView {
         );
         pausa.setOnFinished(e -> bannerRecursos.setVisible(false));
         pausa.play();
+    }
+
+    private BotJugador obtenerBotActual() {
+        Jugador actual = gestor.obtenerTurnoActual();
+        for (BotJugador bot : bots) {
+            if (bot.getJugador() == actual) return bot;
+        }
+        return null;
+    }
+
+    private void ejecutarTurnoBot() {
+        BotJugador bot = obtenerBotActual();
+        if (bot == null) return;
+
+        deshabilitarControlesParaBot();
+        labelFase.setText("Turno del bot\n" + bot.getJugador().getNombre());
+        labelFase.setText("Bot pensando...");
+        botonDado.setDisable(true);
+        botonFinTurno.setDisable(true);
+        btnAldea.setDisable(true);
+        btnCiudad.setDisable(true);
+        btnCamino.setDisable(true);
+
+        javafx.animation.PauseTransition pausa = new javafx.animation.PauseTransition(
+                javafx.util.Duration.seconds(1.5)
+        );
+
+        pausa.setOnFinished(e -> {
+            Dado dado = new Dado();
+            int resultado = dado.lanzar();
+            dibujarDado(canvasDado1, dado.getDado1());
+            dibujarDado(canvasDado2, dado.getDado2());
+            totalLabel.setText("Total: " + resultado);
+
+            bot.setUltimoDado(resultado);
+
+            if (resultado == 7) {
+                // Mover ladrón sin llamar ejecutarTurno completo
+                bot.moverLadronInteligente();
+                Hexagono posLadron = logicaCatan.getLadron().getPosicion();
+                if (posLadron != null) mapaVisual.dibujarLadron(posLadron);
+            } else {
+                String resumen = logicaCatan.producirRecursos(resultado);
+                mostrarResumenRecursos(resumen, resultado);
+            }
+
+            javafx.animation.PauseTransition pausaAccion = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2.0));
+
+            pausaAccion.setOnFinished(ev -> {
+                // Ejecutar árbol de decisiones UNA sola vez
+                bot.ejecutarTurno();
+
+                // Actualizar solo los nodos que cambiaron
+                for (Vertice v : listaVertices) {
+                    mapaVisual.actualizarVertice(v);
+                }
+                for (Arista a : listaAristas) {
+                    mapaVisual.actualizarArista(a);
+                }
+
+                actualizarInventario();
+
+                Jugador ganador = logicaCatan.verificarVictoria();
+                if (ganador != null) {
+                    mostrarPantallaVictoria(ganador);
+                    return;
+                }
+
+                javafx.animation.PauseTransition pausaFin = new javafx.animation.PauseTransition(
+                        javafx.util.Duration.seconds(1.0)
+                );
+                pausaFin.setOnFinished(ef -> {
+                    gestor.pasarTurno();
+                    actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                            gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                    actualizarInventario();
+                    actualizarColorInventario();
+                    totalLabel.setText("Total: —");
+                    dibujarDado(canvasDado1, 1);
+                    dibujarDado(canvasDado2, 1);
+                    labelFase.setText("¡Fase normal!\nTira los dados");
+
+                    if (obtenerBotActual() != null) {
+                        ejecutarTurnoBot();
+                    } else {
+                        habilitarControlesParaHumano();
+                    }
+                });
+                pausaFin.play();
+            });
+            pausaAccion.play();
+        });
+        pausa.play();
+    }
+
+    private void deshabilitarControlesParaBot() {
+        botonDado.setDisable(true);
+        botonFinTurno.setDisable(true);
+        btnAldea.setDisable(true);
+        btnCiudad.setDisable(true);
+        btnCamino.setDisable(true);
+        btnComprarCarta.setDisable(true);
+        botonVerCartas.setDisable(true);
+        btnIntercambio.setDisable(true);
+    }
+
+    private void habilitarControlesParaHumano() {
+        botonDado.setDisable(false);
+        btnAldea.setDisable(true);
+        btnCiudad.setDisable(true);
+        btnCamino.setDisable(true);
+        btnComprarCarta.setDisable(true);
+        botonVerCartas.setDisable(false);
+        btnIntercambio.setDisable(false);
+        botonFinTurno.setDisable(true);
+    }
+
+    private void ejecutarFaseInicialBot() {
+        BotJugador bot = obtenerBotActual();
+        if (bot == null) return;
+
+        labelFase.setText("Bot colocando\naldea inicial...");
+
+        javafx.animation.PauseTransition pausa = new javafx.animation.PauseTransition(
+                javafx.util.Duration.seconds(1.5)
+        );
+
+        pausa.setOnFinished(e -> {
+            Vertice mejorVertice = bot.encontrarMejorVerticeInicial();
+            if (mejorVertice != null) {
+                mejorVertice.construirAldeaDirecto(bot.getJugador());
+                mapaVisual.actualizarVertice(mejorVertice); // ← sin renderizado completo
+            }
+
+            javafx.animation.PauseTransition pausaCamino = new javafx.animation.PauseTransition(
+                    javafx.util.Duration.seconds(1.5)
+            );
+
+            pausaCamino.setOnFinished(ev -> {
+                Arista mejorArista = bot.encontrarAristaInicialAdyacente(mejorVertice);
+                if (mejorArista != null) {
+                    mejorArista.construirCarretera(new Carretera(bot.getJugador()));
+                    mapaVisual.actualizarArista(mejorArista); // ← sin renderizado completo
+                }
+                procesarFinTurnoInicial();
+            });
+            pausaCamino.play();
+        });
+        pausa.play();
+    }
+
+    private void procesarFinTurnoInicial() {
+        aldeaInicialPuesta = true;
+        construccionesIniciales++;
+        aldeaInicialPuesta = false;
+
+        if (!rondaInversa) {
+            if (this.gestor.esUltimoJugador()) {
+                rondaInversa = true;
+                labelFase.setText("Fase inicial - Ronda 2\n" +
+                        gestor.obtenerTurnoActual().getNombre() + ": coloca tu aldea");
+            } else {
+                this.gestor.pasarTurno();
+                actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                        gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                labelFase.setText("Fase inicial\n" +
+                        gestor.obtenerTurnoActual().getNombre() + ": coloca tu aldea");
+            }
+        } else {
+            if (this.gestor.esPrimerJugador()) {
+                faseActual = FaseJuego.NORMAL;
+                labelFase.setText("¡Fase normal!");
+                habilitarBotonesFaseNormal(btnAldea, btnCiudad, btnCamino, botonDado);
+                mapaVisual.setFaseInicial(false);
+                return;
+            } else {
+                this.gestor.pasarTurnoReversa();
+                actualizarTarjetas(tarjetasJugadores, nombresJugadores,
+                        gestor.obtenerTurnoActual().getNombre(), coloresJugador);
+                labelFase.setText("Fase inicial - Ronda 2\n" +
+                        gestor.obtenerTurnoActual().getNombre() + ": coloca tu aldea");
+            }
+        }
+
+        // ← UN SOLO bloque, sin duplicados
+        if (obtenerBotActual() != null) {
+            deshabilitarControlesParaBot();
+            ejecutarFaseInicialBot();
+        } else {
+            btnAldea.setDisable(false);
+            btnCamino.setDisable(true);
+            botonFinTurno.setDisable(true);
+            btnAldea.setStyle(estiloBotonActivo);
+            btnCamino.setStyle(estiloBotonConstruir);
+            modoActual = ModoConstruccion.ALDEA;
+            mapaVisual.setModo(ModoConstruccion.ALDEA);
+        }
+    }
+
+    private boolean esBotJugador(Jugador jugador) {
+        return bots.stream().anyMatch(b -> b.getJugador() == jugador);
+    }
+
+    private BotJugador getBotDeJugador(Jugador jugador) {
+        return bots.stream()
+                .filter(b -> b.getJugador() == jugador)
+                .findFirst().orElse(null);
     }
 }
