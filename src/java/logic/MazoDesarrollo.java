@@ -1,7 +1,5 @@
 package logic;
 
-import model.Hexagono;
-import model.Ladron;
 import structures.ArregloDinamico;
 import structures.Pila;
 import java.util.Random;
@@ -19,9 +17,10 @@ public class MazoDesarrollo {
         ArregloDinamico<CartaDesarrollo> temporal = new ArregloDinamico<>(25);
 
         //Agregar las cartas según las reglas de Catan
-        for(int i=0; i<14; i++) temporal.append(new CartaCaballero());
-        for(int i=0; i<5; i++)  temporal.append(new CartaPuntoVictoria());
-        for(int i=0; i<2; i++)  temporal.append(new CartaMonopolio());
+        for (int i = 0; i < 14; i++) temporal.append(new CartaCaballero());
+        for (int i = 0; i < 5; i++)  temporal.append(new CartaPuntoVictoria());
+        for (int i = 0; i < 2; i++)  temporal.append(new CartaMonopolio());
+        for (int i = 0; i < 2; i++)  temporal.append(new CartaConstruccionCaminos());
 
         barajar(temporal);
 
