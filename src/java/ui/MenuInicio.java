@@ -35,7 +35,7 @@ public class MenuInicio {
         titulo.setFont(Font.font("Georgia", FontWeight.BOLD, 48));
         titulo.setTextFill(Color.WHITE);
 
-        Label subtitulo = new Label("Ingresa los nombres de los jugadores");
+        Label subtitulo = new Label("Configura los jugadores");
         subtitulo.setFont(Font.font("Georgia", 16));
         subtitulo.setTextFill(Color.LIGHTGRAY);
 
@@ -49,6 +49,7 @@ public class MenuInicio {
         };
 
         List<TextField> campos = new ArrayList<>();
+        List<javafx.scene.control.ToggleButton> toggles = new ArrayList<>();
 
         for (int i = 0; i < 4; i++) {
             HBox fila = new HBox(12);
@@ -74,8 +75,49 @@ public class MenuInicio {
                             estilosBorde[i]
             );
 
+            javafx.scene.control.ToggleButton toggle = new javafx.scene.control.ToggleButton("Humano");
+            toggle.setStyle(
+                    "-fx-background-color: #1E8449;" +
+                            "-fx-text-fill: white;" +
+                            "-fx-font-family: 'Georgia';" +
+                            "-fx-font-size: 12px;" +
+                            "-fx-border-radius: 4;" +
+                            "-fx-background-radius: 4;" +
+                            "-fx-padding: 8 12;"
+            );
+            toggle.setOnAction(e -> {
+                if (toggle.isSelected()) {
+                    toggle.setText("Bot");
+                    toggle.setStyle(
+                            "-fx-background-color: #8B1A1A;" +
+                                    "-fx-text-fill: #D4A843;" +
+                                    "-fx-font-family: 'Georgia';" +
+                                    "-fx-font-size: 12px;" +
+                                    "-fx-border-radius: 4;" +
+                                    "-fx-background-radius: 4;" +
+                                    "-fx-padding: 8 12;"
+                    );
+                    campo.setText("Bot " + (campos.indexOf(campo) + 1));
+                    campo.setDisable(true);
+                } else {
+                    toggle.setText("Humano");
+                    toggle.setStyle(
+                            "-fx-background-color: #1E8449;" +
+                                    "-fx-text-fill: white;" +
+                                    "-fx-font-family: 'Georgia';" +
+                                    "-fx-font-size: 12px;" +
+                                    "-fx-border-radius: 4;" +
+                                    "-fx-background-radius: 4;" +
+                                    "-fx-padding: 8 12;"
+                    );
+                    campo.setText("");
+                    campo.setDisable(false);
+                }
+            });
+
             campos.add(campo);
-            fila.getChildren().addAll(etiqueta, campo);
+            toggles.add(toggle);
+            fila.getChildren().addAll(etiqueta, campo,toggle);
             root.getChildren().add(fila);
         }
 
@@ -96,7 +138,9 @@ public class MenuInicio {
 
         btnJugar.setOnAction(e -> {
             // Validar que todos los campos estén llenos
+            GestorTurnos gestor = new GestorTurnos();
             List<String> nombres = new ArrayList<>();
+            List<Boolean> esBots = new ArrayList<>();
             boolean valido = true;
 
             for (TextField campo : campos) {
@@ -114,17 +158,18 @@ public class MenuInicio {
             }
 
             // Crear jugadores y registrarlos en el gestor
-            GestorTurnos gestor = new GestorTurnos();
+
             for (int i = 0; i < nombres.size(); i++) {
                 // El nombre incluye el color para que obtenerColorJugador funcione
                 Jugador j = new Jugador(nombres.get(i));
                 j.setColor(colores[i].toLowerCase());
                 gestor.registrarJugador(j);
+                esBots.add(toggles.get(i).isSelected());
             }
             System.out.println("Jugadores registrados:");
             gestor.verOrdenDeTurnos();
             System.out.println("Turno actual: " + gestor.obtenerTurnoActual().getNombre());
-            new JuegoView(stage, gestor).iniciar();
+            new JuegoView(stage, gestor, esBots).iniciar();
         });
 
         root.getChildren().addAll(titulo, subtitulo, error, btnJugar);
