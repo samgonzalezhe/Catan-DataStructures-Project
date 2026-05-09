@@ -1,4 +1,9 @@
-package com.mycompany.catan;
+package model;
+
+import logic.Jugador;
+import logic.Recurso;
+
+import java.util.Map;
 
 public class Ciudad extends Construccion {
 
