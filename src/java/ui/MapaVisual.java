@@ -529,4 +529,14 @@ public class MapaVisual {
     public void setLogicaCatan(MapaCatan logicaCatan) {
         this.logicaCatan = logicaCatan;
     }
+
+    public void actualizarVertice(Vertice v) {
+        Circle nodo = nodosVertices.get(v);
+        if (nodo != null) actualizarEstiloVertice(nodo, v);
+    }
+
+    public void actualizarArista(Arista a) {
+        Line linea = nodosAristas.get(a);
+        if (linea != null) actualizarEstiloArista(linea, a);
+    }
 }
