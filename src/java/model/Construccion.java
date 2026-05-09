@@ -1,4 +1,6 @@
-package com.mycompany.catan;
+package model;
+
+import logic.Jugador;
 
 public abstract class Construccion {
 
@@ -13,9 +15,4 @@ public abstract class Construccion {
     }
 
     public abstract int getPuntosVictoria();
-
-    public Jugador getJugador() {
-        return propietario;
-    }
-
 }
