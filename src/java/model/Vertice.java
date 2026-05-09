@@ -97,6 +97,15 @@ public class Vertice {
         return true;
     }
 
+    public boolean esPosicionValida() {
+        // Solo verifica distancia, sin recursos
+        if (this.construccion != null) return false;
+        for (Vertice vecino : vecinos) {
+            if (vecino.getConstruccion() != null) return false;
+        }
+        return true;
+    }
+
     //Getters y setters
 
     public void setConstruccion(Construccion construccion) {
